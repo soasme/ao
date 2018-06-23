@@ -1,0 +1,20 @@
+actor = require("actor");
+
+ping = a () {
+    recv (msg) {
+        if (msg.get("type") == "PONG") {
+            print("PONG!");
+            pong = a () {
+                recv (msg) {
+                    if (msg.get("type") == "PING") {
+                        print("PING!");
+                        actor.spawn(ping);
+                    }
+                }
+            };
+            actor.sleep(1);
+            pong.send({"type": "PING"});
+        }
+    }
+}
+ping.send({"type": "PONG"})
