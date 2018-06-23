@@ -1,7 +1,23 @@
 import os
 import sys
 
-from ao.core.machine import Machine, parse, jitdriver
+try:
+    from rpython.rlib.jit import JitDriver, purefunction
+except ImportError:
+    class JitDriver(object):
+        def __init__(self,**kw): pass
+        def jit_merge_point(self,**kw): pass
+        def can_enter_jit(self,**kw): pass
+    def purefunction(f): return f
+
+from ao.core.machine import Machine, parse
+
+def get_location(pc, program, context):
+    return "%s_%s" % (pc, program[pc])
+
+
+jitdriver = JitDriver(greens=['pc', 'program', 'context', ], reds=['machine'],
+        get_printable_location=get_location)
 
 def mainloop(program, context):
     pc = 0
