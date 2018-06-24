@@ -1,16 +1,18 @@
+from ao.core.builtins.registry import BUILTIN_REGISTRY
+from ao.core.types import Int, Str, Float, Bool, Null, Array, Object, Env, Builtin
+
 LOAD_LITERAL = 1
 LOAD_VARIABLE = 2
 LOAD_BUILTIN = 3
 LOAD_CLOSURE = 4
 PRINT = 5
 ARITH_OP = 6
-LOGIC_OP = 7
-STORE_VARIABLE = 8
-MAKE_FUNCTION = 9
-CALL_FUNCTION = 10
-RETURN_VALUE = 11
-MAKE_OBJECT = 12
-MAKE_ARRAY = 13
+STORE_VARIABLE = 9
+MAKE_FUNCTION = 10
+CALL_FUNCTION = 11
+RETURN_VALUE = 12
+MAKE_OBJECT = 13
+MAKE_ARRAY = 14
 
 ARITH_ADD = 1
 ARITH_SUB = 2
@@ -80,23 +82,13 @@ def op_bitor(left, right):
     else:
         raise Exception('unknown type for mod: %s, %s' % ('Type1', 'Type2'))
 
-# def op_and(left, right):
-    # if left is true and right is true:
-        # return true
-    # else:
-        # return false
+def op_and(tos):
+    return isinstance(tos, Bool) and tos.value()
 
-# def op_or(left, right):
-    # if isinstance(left, Bool) and isinstance(right, Bool):
-        # return Bool(left.value() or right.value())
-    # else:
-        # raise Exception('unknown type for or: %s, %s' % ('Type1', 'Type2'))
-
-# def op_not(tos):
-    # if isinstance(tos, Bool):
-        # return Bool(not tos.value())
-    # else:
-        # raise Exception('unknown type for not: %s' % ('Type'))
+def call_function(f, params):
+    if isinstance(f, Builtin):
+        return BUILTIN_REGISTRY[f.code](params)
+    raise Exception('too many arguments')
 
 class Machine(object):
 
@@ -116,6 +108,15 @@ class Machine(object):
             key = context["symbols"][code[1]]
             tos = frame.pop()
             self.env.store(key, tos)
+        elif code[0] == LOAD_BUILTIN:
+            frame.append(Builtin(code[1]))
+        elif code[0] == CALL_FUNCTION:
+            parameters = []
+            for _ in range(code[1]):
+                parameters.append(frame.pop())
+            f = frame.pop()
+            r = call_function(f, parameters)
+            frame.append(r)
         elif code[0] == ARITH_OP:
             if code[1] == ARITH_ADD:
                 frame.append(op_add(frame.pop(), frame.pop()))
@@ -137,92 +138,9 @@ class Machine(object):
                 frame.append(op_bitor(frame.pop(), frame.pop()))
             else:
                 raise Exception('unknown operator %d', code[1])
-        # elif code[0] == LOGIC_OP:
-            # if code[1] == LOGIC_AND:
-                # frame.append(op_and(frame.pop(), frame.pop()))
-            # elif code[1] == LOGIC_OR:
-                # frame.append(op_or(frame.pop(), frame.pop()))
-            # elif code[1] == LOGIC_NOT:
-                # frame.append(op_not(frame.pop()))
-            # else:
-                # raise Exception('unknown operator %d', code[1])
         elif code[0] == PRINT:
             print(frame.pop().str())
         return pc + 1
-
-
-class Literal(object):
-    pass
-class Int(Literal):
-    def __init__(self, val):
-        self.intval = val
-    def value(self):
-        return self.intval
-    def str(self):
-        return str(self.intval)
-class Str(Literal):
-    def __init__(self, val):
-        self.strval = val
-    def value(self):
-        return self.strval
-    def str(self):
-        return str(self.strval)
-
-class Bool(Literal):
-    def __init__(self, val):
-        self.boolval = val
-    def value(self):
-        return self.boolval
-    def str(self):
-        return str(self.boolval)
-class Null(Literal):
-    def __init__(self, val):
-        self.nullval = val
-    def value(self):
-        return self.nullval
-    def str(self):
-        return "null"
-class Float(Literal):
-    def __init__(self, val):
-        self.floatval = val
-    def value(self):
-        return self.floatval
-    def str(self):
-        return str(self.floatval)
-class Array(Literal):
-    def __init__(self, val):
-        self.arrayval = val
-    def value(self):
-        return self.arrayval
-    def str(self):
-        return "[%s]" % (", ".join([e.str() for e in self.arrayval]))
-class Object(Literal):
-    def __init__(self, val):
-        self.objectval = val
-    def value(self):
-        return self.objectval
-    def str(self):
-        return "{object}"
-class Env(Object):
-
-    def __init__(self, parent):
-        self.parent = parent
-        self.bindings = {}
-
-    def resolve(self, key):
-        if not isinstance(key, Str):
-            raise Exception('unknown variable name `%s`.' % key.str())
-        _key = key.value()
-        if _key not in self.bindings:
-            if self.parent is None:
-                raise Exception('undefined variable `%s`.' % key)
-            return self.parent.resolve(_key)
-        return self.bindings[_key]
-
-    def store(self, key, value):
-        if not isinstance(key, Str):
-            raise Exception('unknown variable name `%s`.' % key.str())
-        self.bindings[key.value()] = value
 
 
 def parse(content):
@@ -236,7 +154,10 @@ def parse(content):
         [STORE_VARIABLE, 0],
         [LOAD_VARIABLE, 0],
         [PRINT],
+        [LOAD_BUILTIN, 1],
+        [CALL_FUNCTION, 0],
+        [PRINT],
     ], {
-        "literals": [Int(1), Int(2), Str("hello world")],
+        "literals": [Int(1), Int(2), Str("hello world"), ],
         "symbols": [Str("abc")],
     }
