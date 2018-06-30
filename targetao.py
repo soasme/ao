@@ -151,6 +151,32 @@ class Program(object):
             self.scan_ast(target, f_var) # load function first
             argc = len(ast.children[1:]) # call function with argc(nubmer of args)
             self.programs[target].instructions.append([CALL_FUNCTION, argc])
+        elif ast.symbol == 'if':
+            end_jumping_indexes = []
+            predicate = self.scan_ast(target, ast.children[0])
+            self.programs[target].instructions.append([JUMP_IF_FALSE, 0])
+            next_branching_index = len(self.programs[target].instructions) - 1
+            true_block = self.scan_ast(target, ast.children[1])
+            self.programs[target].instructions.append([JUMP, 0])
+            end_jumping_indexes.append(len(self.programs[target].instructions) - 1)
+            self.programs[target].instructions[next_branching_index][1] = len(self.programs[target].instructions)
+            for condition in ast.children[2:]:
+                if condition.symbol == 'elif':
+                    cond_predicate = self.scan_ast(target, condition.children[0])
+                    self.programs[target].instructions.append([JUMP_IF_FALSE, 0])
+                    next_branching_index = len(self.programs[target].instructions) - 1
+                    cond_block = self.scan_ast(target, condition.children[1])
+                    self.programs[target].instructions.append([JUMP, 0])
+                    end_jumping_indexes.append(len(self.programs[target].instructions) - 1)
+                    self.programs[target].instructions[next_branching_index][1] = len(self.programs[target].instructions)
+                elif condition.symbol == 'else':
+                    else_block = self.scan_ast(target, condition.children[0])
+            for end_jumping_index in end_jumping_indexes:
+                self.programs[target].instructions[end_jumping_index][1] = len(self.programs[target].instructions)
+        elif ast.symbol == 'array':
+            pass # scan children and make array
+        elif ast.symbol == 'object':
+            pass # scan children and make object
 
 
 def parse(source):
@@ -204,14 +230,21 @@ class Machine(object):
                                 self.stack.pop())
         elif opcode == JUMP:
             pc = inst[1]
+            return prog_name, pc
         elif opcode == JUMP_IF_TRUE:
             val = self.stack.pop()
-            if len(val) > 0:
+            if val == 'true':
                 pc = inst[1]
+            else:
+                pc = pc + 1
+            return prog_name, pc
         elif opcode == JUMP_IF_FALSE:
             val = self.stack.pop()
-            if len(val) == 0:
+            if val == 'false':
                 pc = inst[1]
+            else:
+                pc = pc + 1
+            return prog_name, pc
         elif opcode == CALL_FUNCTION:
             prog_sym = self.stack.pop()
             func_bytecode = program.programs[prog_sym]
