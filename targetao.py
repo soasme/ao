@@ -2,6 +2,11 @@ import sys
 
 import os
 import sys
+import json
+
+from rpython.rlib.parsing.ebnfparse import parse_ebnf, make_parse_function
+from rpython.rlib.parsing.parsing import ParseError
+from rpython.rlib.parsing.deterministic import LexerError
 
 try:
     from rpython.rlib.jit import JitDriver, purefunction
@@ -15,6 +20,7 @@ except ImportError:
 PRINT = 0
 LOAD_LITERAL = 1
 LOAD_VARIABLE = 2
+LOAD_FUNCTION = 10
 SAVE_VARIABLE = 3
 CALL_FUNCTION = 4
 RETURN_VALUE = 5
@@ -47,41 +53,110 @@ class Bytecode(object):
     def get_literal(self, index):
         return self.literals[index]
 
+EBNF = """
+STRING: "\\"[^\\\\"]*\\"";
+NUMBER: "\-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][\+\-]?[0-9]+)?";
+IGNORE: " |\n";
+BOOLEAN: "true|false";
+NULL: "null";
+IDENTIFIER: "[a-zA-Z_][a-zA-Z0-9_]*";
+main: >stmt*< [EOF];
+value: <print> | <return> | <f> | <let> | <if> | <while> | <apply> | <IDENTIFIER> | <STRING> | <NUMBER> | <object> | <array> | <BOOLEAN> | <NULL>;
+object: ["{"] (entry [","])* entry* ["}"];
+array: ["["] (value [","])* value* ["]"];
+entry: STRING [":"] value;
+let: IDENTIFIER ["="] value;
+apply: IDENTIFIER ["("] (value [","])* value* [")"];
+f: ["f"] ["("] (IDENTIFIER [","])* IDENTIFIER* [")"] block;
+if: ["if"] ["("] value [")"] block elif* else?;
+elif: ["elif"] ["("] value [")"] block;
+else: ["else"] block;
+while: ["while"] ["("] value [")"] block;
+block: ["{"] stmt* ["}"];
+print: ["print"] value;
+return: ["return"] value;
+stmt: value [";"];
+"""
+
+regexes, rules, _to_ast = parse_ebnf(EBNF)
+parse_ebnf = make_parse_function(regexes, rules, eof=True)
+to_ast = _to_ast()
+
 class Program(object):
 
     def __init__(self):
-        self.programs = {
-            "main": Bytecode(
-                instructions=[
-                    [LOAD_LITERAL, 0], [PRINT], # print("hello world")
-                    [LOAD_LITERAL, 0], [SAVE_VARIABLE, 0], # x = "hello world"
-                    [LOAD_VARIABLE, 0], [PRINT], # print(x)
-                    [LOAD_LITERAL, 1], [CALL_FUNCTION, 1, 1], [PRINT], # print(hello(x))
-                    [LOAD_LITERAL, 2], [EXIT],
-                ],
-                literals=[
-                    "hello world",
-                    "world",
-                    "2",
-                ],
-                symbols=[
-                    "x",
-                    "hello",
-                ],
-            ),
-            "hello": Bytecode(
-                instructions=[
-                    [LOAD_VARIABLE, 0], [RETURN_VALUE], # return value
-                ],
-                literals=[],
-                symbols=["value"]
-            )
-        }
+        self.f_counter = 0
+        self.programs = {}
 
+    def parse_main(self, source):
+        self.programs["main"] = Bytecode([], [], [])
+        try:
+            tree = parse_ebnf(source)
+            ast = to_ast.transform(tree)
+        except ParseError as e:
+            print(e.nice_error_message('main', source))
+            return
+        except LexerError as e:
+            print(e.nice_error_message('main'))
+            return
+        self.scan_ast("main", ast)
+
+    def scan_ast(self, target, ast):
+        if ast.symbol == 'main':
+            for stmt in ast.children:
+                self.scan_ast(target, stmt)
+        elif ast.symbol == 'stmt':
+            self.scan_ast(target, ast.children[0])
+        elif ast.symbol == 'print':
+            self.scan_ast(target, ast.children[0])
+            self.programs[target].instructions.append([PRINT])
+        elif ast.symbol in ('NULL', 'STRING', 'BOOLEAN', 'NUMBER'):
+            self.programs[target].literals.append(ast.additional_info)
+            self.programs[target].instructions.append([
+                LOAD_LITERAL, len(self.programs[target].literals) - 1])
+        elif ast.symbol == 'IDENTIFIER':
+            if ast.additional_info not in self.programs[target].symbols:
+                self.programs[target].symbols.append(ast.additional_info)
+            index = self.programs[target].symbols.index(ast.additional_info)
+            self.programs[target].instructions.append([LOAD_VARIABLE, index])
+        elif ast.symbol == 'let':
+            identifier = ast.children[0]
+            right = ast.children[1]
+            self.scan_ast(target, right)
+            if identifier.additional_info not in self.programs[target].symbols:
+                self.programs[target].symbols.append(identifier.additional_info)
+            index = self.programs[target].symbols.index(identifier.additional_info)
+            self.programs[target].instructions.append([SAVE_VARIABLE, index])
+        elif ast.symbol == 'return':
+            self.scan_ast(target, ast.children[0])
+            self.programs[target].instructions.append([RETURN_VALUE])
+        elif ast.symbol == 'f':
+            self.f_counter = self.f_counter + 1
+            f_target = '@%d' % self.f_counter
+            if f_target not in self.programs[target].symbols:
+                self.programs[target].symbols.append(f_target)
+            params = [p.additional_info for p in ast.children if p.symbol == 'IDENTIFIER']
+            program = Bytecode(instructions=[], literals=[], symbols=params)
+            self.programs[f_target] = program
+            self.scan_ast(f_target, ast.children[len(params)])
+            index = self.programs[target].symbols.index(f_target)
+            self.programs[target].instructions.append([LOAD_FUNCTION, index])
+        elif ast.symbol == 'block':
+            for stmt in ast.children:
+                self.scan_ast(target, stmt)
+        elif ast.symbol == 'apply':
+            for param in ast.children[1:]:
+                self.scan_ast(target, param)
+            f_var = ast.children[0]
+            self.scan_ast(target, f_var) # load function first
+            argc = len(ast.children[1:]) # call function with argc(nubmer of args)
+            self.programs[target].instructions.append([CALL_FUNCTION, argc])
 
 
 def parse(source):
-    return Program()
+    program = Program()
+    program.parse_main(source)
+    return program
 
 class Frame(object):
     def __init__(self, parent=None):
@@ -104,18 +179,29 @@ class Machine(object):
     def run_code(self, program, prog_name, pc):
         bytecode = program.programs[prog_name]
         inst = bytecode.get_instruction(pc)
+        #print prog_name, pc, inst, self.stack
+        #import pdb;pdb.set_trace()
         opcode = inst[0]
         if opcode == PRINT:
             print(self.stack.pop())
         elif opcode == LOAD_LITERAL:
             self.stack.append(bytecode.get_literal(inst[1]))
         elif opcode == LOAD_VARIABLE:
-            self.stack.append(
-                    self.frame.load(
-                        bytecode.get_symbol(inst[1])))
+            sym = bytecode.get_symbol(inst[1])
+            if sym.startswith('@'): # function
+                self.stack.append(sym)
+            else:
+                self.stack.append(self.frame.load(sym))
+        elif opcode == LOAD_FUNCTION:
+            sym = bytecode.get_symbol(inst[1])
+            self.stack.append(sym)
         elif opcode == SAVE_VARIABLE:
-            self.frame.save(bytecode.get_symbol(inst[1]),
-                            self.stack.pop())
+            sym = bytecode.get_symbol(inst[1])
+            if sym.startswith('@'): # function
+                self.stack.append(sym)
+            else:
+                self.frame.save(bytecode.get_symbol(inst[1]),
+                                self.stack.pop())
         elif opcode == JUMP:
             pc = inst[1]
         elif opcode == JUMP_IF_TRUE:
@@ -127,10 +213,10 @@ class Machine(object):
             if len(val) == 0:
                 pc = inst[1]
         elif opcode == CALL_FUNCTION:
-            prog_sym = bytecode.get_symbol(inst[1])
+            prog_sym = self.stack.pop()
             func_bytecode = program.programs[prog_sym]
             frame = Frame(parent=self.frame)
-            argc = inst[2]
+            argc = inst[1]
             i = 0
             while i < argc:
                 argv_i = func_bytecode.get_symbol(i)
