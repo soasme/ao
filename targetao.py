@@ -19,15 +19,17 @@ except ImportError:
 
 PRINT = 0
 LOAD_LITERAL = 1
-LOAD_VARIABLE = 2
-LOAD_FUNCTION = 10
-SAVE_VARIABLE = 3
-CALL_FUNCTION = 4
-RETURN_VALUE = 5
-EXIT = 6
+LOAD_FUNCTION = 2
+LOAD_VARIABLE = 3
+SAVE_VARIABLE = 4
+CALL_FUNCTION = 5
+RETURN_VALUE = 6
 JUMP_IF_TRUE = 7
 JUMP_IF_FALSE = 8
 JUMP = 9
+EXIT = 10
+MAKE_ARRAY = 11
+MAKE_OBJECT = 12
 
 
 def get_location(pc, name, program):
@@ -174,9 +176,16 @@ class Program(object):
             for end_jumping_index in end_jumping_indexes:
                 self.programs[target].instructions[end_jumping_index][1] = len(self.programs[target].instructions)
         elif ast.symbol == 'array':
-            pass # scan children and make array
+            for child in ast.children:
+                self.scan_ast(target, child)
+            self.programs[target].instructions.append([MAKE_ARRAY, len(ast.children)])
         elif ast.symbol == 'object':
-            pass # scan children and make object
+            for entry in ast.children:
+                key = entry.children[0]
+                self.scan_ast(target, key)
+                value = entry.children[1]
+                self.scan_ast(target, value)
+            self.programs[target].instructions.append([MAKE_OBJECT, len(ast.children)])
 
 
 def parse(source):
@@ -228,6 +237,31 @@ class Machine(object):
             else:
                 self.frame.save(bytecode.get_symbol(inst[1]),
                                 self.stack.pop())
+        elif opcode == MAKE_ARRAY:
+            i, argc = 0, inst[1]
+            args = [self.stack.pop() for _ in range(argc)]
+            x = '['
+            while i < argc:
+                x += args[argc - i - 1]
+                if i < argc - 1:
+                    x += ','
+                i = i + 1
+            x += ']'
+            self.stack.append(x)
+        elif opcode == MAKE_OBJECT:
+            i, argc = 0, inst[1]
+            # [..., [value, key]]
+            args = [[self.stack.pop(), self.stack.pop()] for _ in range(argc)]
+            x = '{'
+            while i < argc:
+                x += args[argc - i - 1][1]
+                x += ':'
+                x += args[argc - i - 1][0]
+                if i < argc - 1:
+                    x += ','
+                i = i + 1
+            x += '}'
+            self.stack.append(x)
         elif opcode == JUMP:
             pc = inst[1]
             return prog_name, pc
