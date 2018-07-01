@@ -15,42 +15,22 @@ except ImportError:
         def can_enter_jit(self,**kw): pass
     def purefunction(f): return f
 
-PRINT = 0
-LOAD_LITERAL = 1
-LOAD_FUNCTION = 2
-LOAD_VARIABLE = 3
-SAVE_VARIABLE = 4
-CALL_FUNCTION = 5
-RETURN_VALUE = 6
-JUMP_IF_TRUE_AND_POP = 7
-JUMP_IF_FALSE_AND_POP = 8
-JUMP = 9
-EXIT = 10
-MAKE_ARRAY = 11
-MAKE_OBJECT = 12
-BINARY_ADD = 13
-BINARY_SUB = 14
-BINARY_MUL = 15
-BINARY_DIV = 16
-BINARY_MOD = 17
-BINARY_LSHIFT = 18
-BINARY_RSHIFT = 19
-BINARY_AND = 20
-BINARY_OR = 21
-BINARY_XOR = 22
-JUMP_IF_TRUE_OR_POP = 23
-JUMP_IF_FALSE_OR_POP = 24
-LOGICAL_NOT = 25
-BINARY_EQ = 26
-BINARY_NE = 27
-BINARY_GT = 28
-BINARY_GE = 29
-BINARY_LT = 30
-BINARY_LE = 31
-BINARY_IN = 32
-UNARY_NEGATIVE = 33
-UNARY_POSITIVE = 34
-UNARY_REVERSE = 35
+EXIT, PRINT, LOAD_LITERAL, LOAD_FUNCTION, LOAD_VARIABLE, SAVE_VARIABLE, \
+        CALL_FUNCTION, RETURN_VALUE, MAKE_ARRAY, MAKE_OBJECT, \
+        JUMP, JUMP_IF_TRUE_AND_POP, JUMP_IF_FALSE_AND_POP, \
+        JUMP_IF_TRUE_OR_POP, JUMP_IF_FALSE_OR_POP, \
+        BINARY_ADD, BINARY_SUB, BINARY_MUL, BINARY_DIV, BINARY_MOD, \
+        BINARY_LSHIFT, BINARY_RSHIFT, BINARY_AND, BINARY_OR, BINARY_XOR, \
+        BINARY_EQ, BINARY_NE, BINARY_GT, BINARY_GE, BINARY_LT, BINARY_LE, \
+        BINARY_IN, UNARY_NEGATIVE, UNARY_POSITIVE, UNARY_REVERSE, LOGICAL_NOT, \
+        = range(36)
+
+BINARY_OP = {
+    '==': BINARY_EQ, '!=': BINARY_NE, '>': BINARY_GT, '>=': BINARY_GE,
+    '<': BINARY_LT, '<=': BINARY_LE, 'in': BINARY_IN, '<<': BINARY_LSHIFT,
+    '>>': BINARY_RSHIFT, '+': BINARY_ADD, '-': BINARY_SUB, '*': BINARY_MUL,
+    '/': BINARY_DIV, '%': BINARY_MOD,
+}
 
 def get_location(pc, name, program):
     return "%s:%s:%s" % (name, pc, program.programs[name].get_instruction(pc))
@@ -128,7 +108,6 @@ class Program(object):
         self.programs = {}
 
     def parse_main(self, source):
-        self.programs["main"] = Bytecode([], [], [])
         try:
             tree = parse_ebnf(source)
             ast = to_ast.transform(tree)
@@ -138,6 +117,7 @@ class Program(object):
         except LexerError as e:
             print(e.nice_error_message('main'))
             return
+        self.programs["main"] = Bytecode([], [], [])
         self.scan_ast("main", ast)
 
     def scan_ast(self, target, ast):
@@ -231,20 +211,8 @@ class Program(object):
             self.scan_ast(target, ast.children[0])
             if len(ast.children) > 1:
                 self.scan_ast(target, ast.children[2])
-                if ast.children[1].additional_info == '==':
-                    self.programs[target].instructions.append([BINARY_EQ])
-                elif ast.children[1].additional_info == '!=':
-                    self.programs[target].instructions.append([BINARY_NE])
-                elif ast.children[1].additional_info == '>':
-                    self.programs[target].instructions.append([BINARY_GT])
-                elif ast.children[1].additional_info== '>=':
-                    self.programs[target].instructions.append([BINARY_GE])
-                elif ast.children[1].additional_info == '<':
-                    self.programs[target].instructions.append([BINARY_LT])
-                elif ast.children[1].additional_info == '<=':
-                    self.programs[target].instructions.append([BINARY_LE])
-                elif ast.children[1].additional_info == 'in':
-                    self.programs[target].instructions.append([BINARY_IN])
+                op = BINARY_OP[ast.children[1].additional_info]
+                self.programs[target].instructions.append([op])
         elif ast.symbol == 'or_expr':
             self.scan_ast(target, ast.children[0])
             if len(ast.children) > 1:
@@ -268,36 +236,22 @@ class Program(object):
             if len(ast.children) > 1:
                 for index in range(1, len(ast.children) - 1, 2):
                     self.scan_ast(target, ast.children[index + 1])
-                    if ast.children[index].additional_info == '<<':
-                        self.programs[target].instructions.append([BINARY_LSHIFT])
-                    elif ast.children[index].additional_info == '>>':
-                        self.programs[target].instructions.append([BINARY_RSHIFT])
-                    else:
-                        raise Exception('unknown operator: %s' % ast.children[index].additional_info)
+                    op = BINARY_OP[ast.children[index].additional_info]
+                    self.programs[target].instructions.append([op])
         elif ast.symbol == 'arith_expr':
             self.scan_ast(target, ast.children[0])
             if len(ast.children) > 1:
                 for index in range(1, len(ast.children) - 1, 2):
                     self.scan_ast(target, ast.children[index + 1])
-                    if ast.children[index].additional_info == '+':
-                        self.programs[target].instructions.append([BINARY_ADD])
-                    elif ast.children[index].additional_info == '-':
-                        self.programs[target].instructions.append([BINARY_SUB])
-                    else:
-                        raise Exception('unknown operator: %s' % ast.children[index].additional_info)
+                    op = BINARY_OP[ast.children[index].additional_info]
+                    self.programs[target].instructions.append([op])
         elif ast.symbol == 'term':
             self.scan_ast(target, ast.children[0])
             if len(ast.children) > 1:
                 for index in range(1, len(ast.children) - 1, 2):
                     self.scan_ast(target, ast.children[index + 1])
-                    if ast.children[index].additional_info == '*':
-                        self.programs[target].instructions.append([BINARY_MUL])
-                    elif ast.children[index].additional_info == '/':
-                        self.programs[target].instructions.append([BINARY_DIV])
-                    elif ast.children[index].additional_info == '%':
-                        self.programs[target].instructions.append([BINARY_MOD])
-                    else:
-                        raise Exception('unknown operator: %s' % ast.children[index].additional_info)
+                    op = BINARY_OP[ast.children[index].additional_info]
+                    self.programs[target].instructions.append([op])
         elif ast.symbol == 'factor':
             if len(ast.children) == 2:
                 self.scan_ast(target, ast.children[1])
@@ -367,8 +321,6 @@ class Machine(object):
     def run_code(self, program, prog_name, pc):
         bytecode = program.programs[prog_name]
         inst = bytecode.get_instruction(pc)
-        #print prog_name, pc, inst, self.stack, bytecode.instructions
-        #import pdb;pdb.set_trace()
         opcode = inst[0]
         if opcode == PRINT:
             print(self.stack.pop())
@@ -388,8 +340,7 @@ class Machine(object):
             if sym.startswith('@'): # function
                 self.stack.append(sym)
             else:
-                self.frame.save(bytecode.get_symbol(inst[1]),
-                                self.stack.pop())
+                self.frame.save(bytecode.get_symbol(inst[1]), self.stack.pop())
         elif opcode == MAKE_ARRAY:
             i, argc = 0, inst[1]
             args = [self.stack.pop() for _ in range(argc)]
@@ -474,6 +425,10 @@ class Machine(object):
         elif opcode == UNARY_REVERSE:
             value = self.stack.pop()
             self.stack.append(str(~int(value)))
+        elif opcode == LOGICAL_NOT:
+            value = self.stack.pop()
+            self.stack.append('true' if value == 'false' or value == '[]' or value == '{}'
+                    or value == '""' or value == '0' or value == '0.0'else 'false')
         elif opcode == JUMP:
             pc = inst[1]
             return prog_name, pc
@@ -566,7 +521,8 @@ def entry_point(argv):
         return 1
     return run(os.open(filename, os.O_RDONLY, 0777))
 
-def target(*args):
+def target(driver, *args):
+    driver.exe_name == 'ao'
     return entry_point, None
 
 def jitpolicy(driver):
