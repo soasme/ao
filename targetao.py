@@ -153,6 +153,14 @@ class Program(object):
             self.scan_ast(target, f_var) # load function first
             argc = len(ast.children[1:]) # call function with argc(nubmer of args)
             self.programs[target].instructions.append([CALL_FUNCTION, argc])
+        elif ast.symbol == 'while':
+            start = len(self.programs[target].instructions)
+            predicate = self.scan_ast(target, ast.children[0])
+            self.programs[target].instructions.append([JUMP_IF_TRUE, 0])
+            index = len(self.programs[target].instructions) - 1
+            block = self.scan_ast(target, ast.children[1])
+            self.programs[target].instructions.append([JUMP, start])
+            self.programs[target].instructions[index][1] = len(self.programs[target].instructions)
         elif ast.symbol == 'if':
             end_jumping_indexes = []
             predicate = self.scan_ast(target, ast.children[0])
@@ -218,7 +226,8 @@ class Machine(object):
         #import pdb;pdb.set_trace()
         opcode = inst[0]
         if opcode == PRINT:
-            print(self.stack.pop())
+            val = self.stack.pop()
+            print(val)
         elif opcode == LOAD_LITERAL:
             self.stack.append(bytecode.get_literal(inst[1]))
         elif opcode == LOAD_VARIABLE:
