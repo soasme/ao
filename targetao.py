@@ -186,9 +186,9 @@ class Program(object):
             if len(ast.children) > 1:
                 indexes = []
                 for and_expr in ast.children[1:]:
-                    self.scan_ast(target, and_expr)
                     self.programs[target].instructions.append([JUMP_IF_TRUE_OR_POP, 0])
                     indexes.append(len(self.programs[target].instructions) - 1)
+                    self.scan_ast(target, and_expr)
                 end = len(self.programs[target].instructions)
                 for index in indexes:
                     self.programs[target].instructions[index][1] = end
@@ -197,9 +197,9 @@ class Program(object):
             if len(ast.children) > 1:
                 indexes = []
                 for and_expr in ast.children[1:]:
-                    self.scan_ast(target, and_expr)
                     self.programs[target].instructions.append([JUMP_IF_FALSE_OR_POP, 0])
                     indexes.append(len(self.programs[target].instructions) - 1)
+                    self.scan_ast(target, and_expr)
                 end = len(self.programs[target].instructions)
                 for index in indexes:
                     self.programs[target].instructions[index][1] = end
@@ -269,6 +269,7 @@ class Program(object):
             program = Bytecode(instructions=[], literals=[], symbols=params)
             self.programs[f_target] = program
             self.scan_ast(f_target, ast.children[len(params)])
+            if program.instructions[-1][0] != RETURN_VALUE: program.instructions.append([RETURN_VALUE, 0])
             index = self.programs[target].symbols.index(f_target)
             self.programs[target].instructions.append([LOAD_FUNCTION, index])
         elif ast.symbol == 'IDENTIFIER':
@@ -320,6 +321,7 @@ class Machine(object):
     def run_code(self, program, prog_name, pc):
         bytecode = program.programs[prog_name]
         inst = bytecode.get_instruction(pc)
+        #print prog_name, pc, inst, self.stack
         opcode = inst[0]
         if opcode == PRINT:
             print(self.stack.pop())
@@ -476,7 +478,7 @@ class Machine(object):
             self.stack.append(str(pc))
             return prog_sym, 0
         elif opcode == RETURN_VALUE:
-            val = self.stack.pop()
+            val = 'null' if len(inst) > 1 and inst[1] == 0 else self.stack.pop()
             pc = int(self.stack.pop())
             prog_name = self.stack.pop()
             self.frame = self.frame.parent
