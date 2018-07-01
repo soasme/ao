@@ -32,17 +32,6 @@ g = [1, 2, 3];
 h = {"key": "value"};
 ```
 
-Define function is just yet another assignment.
-
-```
-i = f (j) {
-    return j * 2;
-};
-
-j = i(24);
-print j;
-```
-
 Control flow is very traditional.
 
 ```
@@ -62,6 +51,17 @@ while (c <= 0) {
     print c;
     c = c - 1;
 }
+```
+
+Define function is just yet another assignment.
+
+```
+i = f (j) {
+    return j * 2;
+};
+
+j = i(24);
+print j;
 ```
 
 ## Develop
@@ -89,7 +89,13 @@ TODO:
 
 ## Contribute
 
-The goal of AO is to create simple syntax so that new learners can quickly start learning programming.
+The AO Philosophy:
+
+* Simplicity.
+    * AO aims to provie simple syntax so that new learners can quickly start learning programming.
+    * No matter what a mess the implementation is, keep the interface simple.
+* Correctness.
+    * Make it right. If found one, fix it. :)
 
 ## License
 
