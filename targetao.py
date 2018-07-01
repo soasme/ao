@@ -205,8 +205,7 @@ class Program(object):
                     self.programs[target].instructions[index][1] = end
         elif ast.symbol == 'not_test':
             self.scan_ast(target, ast.children[0])
-            if ast.children[0].additional_info == 'not_test':
-                self.programs[target].instructions.append([LOGICAL_NOT])
+            self.programs[target].instructions.append([LOGICAL_NOT])
         elif ast.symbol == 'comparison':
             self.scan_ast(target, ast.children[0])
             if len(ast.children) > 1:

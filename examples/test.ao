@@ -27,6 +27,14 @@ print true and false;
 print false and true;
 print false and false;
 print true and true;
+print not not 1;
+print not not 0;
+print not not "";
+print not not "hello world";
+print not not [1];
+print not not [];
+print not not {"key": "value"};
+print not not {};
 
 if (true) {
     print "yes";
