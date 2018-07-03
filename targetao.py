@@ -107,8 +107,13 @@ class Program(object):
         self.f_counter = 0
         self.programs = {}
 
+    def remove_comment(self, source):
+        lines = source.splitlines()
+        return '\n'.join([l for l in lines if not l.lstrip().startswith('#')])
+
     def parse_main(self, source):
         try:
+            source = self.remove_comment(source)
             tree = parse_ebnf(source)
             ast = to_ast.transform(tree)
         except ParseError as e:
@@ -301,62 +306,108 @@ def parse(source):
     program.parse_main(source)
     return program
 
+class Code(object):
+
+    def __init__(self, name, environment_frame):
+        self.name = name
+        self.frame = environment_frame
+
 class Frame(object):
-    def __init__(self, parent=None):
-        self.parent = parent
+    def __init__(self, name, pc=0, parent=None):
         self.bindings = {}
-    def save(self, key, value):
+        self.evaluations = []
+        self.codes = {}
+        self.parent = parent
+        self.pc = pc
+        self.name = name
+    def save_pc(self, pc):
+        self.pc = pc
+    def save(self, key, value, frame=None):
         self.bindings[key] = value
+        if value.startswith('@') and value not in self.codes:
+            self.codes[value] = Code(value, frame)
     def load(self, key):
-        return self.bindings[key]
+        if key in self.bindings:
+            return self.bindings[key]
+        if self.parent is not None:
+            return self.parent.load(key)
+        else:
+            raise Exception('unknown variable: %s' % key)
+    def get_code(self, key):
+        if key in self.codes:
+            return self.codes[key]
+        elif key not in self.codes and self.parent is None:
+            raise Exception('unknown function: %s' % key)
+        else:
+            return self.parent.get_code(key)
+    def push(self, value):
+        self.evaluations.append(value)
+    def pop(self):
+        return self.evaluations.pop()
+    def peek(self):
+        return self.evaluations[-1]
 
 class Machine(object):
 
     def __init__(self, program):
-        self.stack = []
-        self.frame = Frame()
         self.running = True
         self.exit_code = 0
+        self.stack = [Frame('main')]
+        self.program = program
 
-    def run_code(self, program, prog_name, pc):
-        bytecode = program.programs[prog_name]
+    def run_code(self, prog_name, pc):
+        tos = self.stack[-1]
+        tos.save_pc(pc)
+        bytecode = self.program.programs[prog_name]
         inst = bytecode.get_instruction(pc)
-        #print prog_name, pc, inst, self.stack
         opcode = inst[0]
-        if opcode == PRINT:
-            print(self.stack.pop())
+        #print prog_name, pc, inst, tos.evaluations
+        if opcode == CALL_FUNCTION:
+            func_sym = tos.pop()
+            func_code = tos.get_code(func_sym)
+            parent_frame = func_code.frame
+            func_bytecode = self.program.programs[func_sym]
+            new_frame = Frame(name=func_sym, pc=0, parent=parent_frame)
+            argc = inst[1]
+            for i in range(argc):
+                argv_i_sym = func_bytecode.get_symbol(i)
+                new_frame.save(argv_i_sym, tos.pop(), new_frame)
+            self.stack.append(new_frame)
+            return func_sym, 0
+        elif opcode == RETURN_VALUE:
+            val = tos.pop()
+            old_frame = self.stack.pop()
+            tos = self.stack[-1]
+            pc = tos.pc
+            prog_name = tos.name
+            tos.push(val)
+            if val.startswith('@'):
+                tos.codes[val] = Code(val, old_frame)
+        elif opcode == PRINT:
+            print(tos.pop())
         elif opcode == LOAD_LITERAL:
-            self.stack.append(bytecode.get_literal(inst[1]))
+            tos.push(bytecode.get_literal(inst[1]))
         elif opcode == LOAD_VARIABLE:
             sym = bytecode.get_symbol(inst[1])
-            if sym.startswith('@'): # function
-                self.stack.append(sym)
-            else:
-                self.stack.append(self.frame.load(sym))
+            tos.push(tos.load(sym))
         elif opcode == LOAD_FUNCTION:
             sym = bytecode.get_symbol(inst[1])
-            self.stack.append(sym)
+            tos.push(sym)
         elif opcode == SAVE_VARIABLE:
             sym = bytecode.get_symbol(inst[1])
-            if sym.startswith('@'): # function
-                self.stack.append(sym)
-            else:
-                self.frame.save(bytecode.get_symbol(inst[1]), self.stack.pop())
+            tos.save(sym, tos.pop())
         elif opcode == MAKE_ARRAY:
-            i, argc = 0, inst[1]
-            args = [self.stack.pop() for _ in range(argc)]
-            x = '['
-            while i < argc:
+            argc, args, x = inst[1], [tos.pop() for _ in range(inst[1])], '['
+            for i in range(argc):
                 x += args[argc - i - 1]
                 if i < argc - 1:
                     x += ','
-                i = i + 1
             x += ']'
-            self.stack.append(x)
+            tos.push(x)
         elif opcode == MAKE_OBJECT:
             i, argc = 0, inst[1]
             # [..., [value, key]]
-            args = [[self.stack.pop(), self.stack.pop()] for _ in range(argc)]
+            args = [[tos.pop(), tos.pop()] for _ in range(argc)]
             x = '{'
             while i < argc:
                 x += args[argc - i - 1][1]
@@ -366,125 +417,105 @@ class Machine(object):
                     x += ','
                 i = i + 1
             x += '}'
-            self.stack.append(x)
+            tos.push(x)
         elif opcode == BINARY_ADD:
-            right, left = self.stack.pop(), self.stack.pop()
-            self.stack.append(str(int(left) + int(right)))
+            right, left = tos.pop(), tos.pop()
+            tos.push(str(int(left) + int(right)))
         elif opcode == BINARY_SUB:
-            right, left = self.stack.pop(), self.stack.pop()
-            self.stack.append(str(int(left) - int(right)))
+            right, left = tos.pop(), tos.pop()
+            tos.push(str(int(left) - int(right)))
         elif opcode == BINARY_MUL:
-            right, left = self.stack.pop(), self.stack.pop()
-            self.stack.append(str(int(left) * int(right)))
+            right, left = tos.pop(), tos.pop()
+            tos.push(str(int(left) * int(right)))
         elif opcode == BINARY_DIV:
-            right, left = self.stack.pop(), self.stack.pop()
-            self.stack.append(str(int(left) / int(right)))
+            right, left = tos.pop(), tos.pop()
+            tos.push(str(int(left) / int(right)))
         elif opcode == BINARY_MOD:
-            right, left = self.stack.pop(), self.stack.pop()
-            self.stack.append(str(int(left) % int(right)))
+            right, left = tos.pop(), tos.pop()
+            tos.push(str(int(left) % int(right)))
         elif opcode == BINARY_LSHIFT:
-            right, left = self.stack.pop(), self.stack.pop()
-            self.stack.append(str(int(left) << int(right)))
+            right, left = tos.pop(), tos.pop()
+            tos.push(str(int(left) << int(right)))
         elif opcode == BINARY_RSHIFT:
-            right, left = self.stack.pop(), self.stack.pop()
-            self.stack.append(str(int(left) >> int(right)))
+            right, left = tos.pop(), tos.pop()
+            tos.push(str(int(left) >> int(right)))
         elif opcode == BINARY_AND:
-            right, left = self.stack.pop(), self.stack.pop()
-            self.stack.append(str(int(left) & int(right)))
+            right, left = tos.pop(), tos.pop()
+            tos.push(str(int(left) & int(right)))
         elif opcode == BINARY_OR:
-            right, left = self.stack.pop(), self.stack.pop()
-            self.stack.append(str(int(left) | int(right)))
+            right, left = tos.pop(), tos.pop()
+            tos.push(str(int(left) | int(right)))
         elif opcode == BINARY_XOR:
-            right, left = self.stack.pop(), self.stack.pop()
-            self.stack.append(str(int(left) ^ int(right)))
+            right, left = tos.pop(), tos.pop()
+            tos.push(str(int(left) ^ int(right)))
         elif opcode == BINARY_EQ: # FIXME: support for all types.
-            right, left = self.stack.pop(), self.stack.pop()
-            self.stack.append('true' if int(left) == int(right) else 'false')
+            right, left = tos.pop(), tos.pop()
+            tos.push('true' if int(left) == int(right) else 'false')
         elif opcode == BINARY_NE:
-            right, left = self.stack.pop(), self.stack.pop()
-            self.stack.append('true' if int(left) != int(right) else 'false')
+            right, left = tos.pop(), tos.pop()
+            tos.push('true' if int(left) != int(right) else 'false')
         elif opcode == BINARY_GT:
-            right, left = self.stack.pop(), self.stack.pop()
-            self.stack.append('true' if int(left) > int(right) else 'false')
+            right, left = tos.pop(), tos.pop()
+            tos.push('true' if int(left) > int(right) else 'false')
         elif opcode == BINARY_GE:
-            right, left = self.stack.pop(), self.stack.pop()
-            self.stack.append('true' if int(left) >= int(right) else 'false')
+            right, left = tos.pop(), tos.pop()
+            tos.push('true' if int(left) >= int(right) else 'false')
         elif opcode == BINARY_LT:
-            right, left = self.stack.pop(), self.stack.pop()
-            self.stack.append('true' if int(left) < int(right) else 'false')
+            right, left = tos.pop(), tos.pop()
+            tos.push('true' if int(left) < int(right) else 'false')
         elif opcode == BINARY_LE:
-            right, left = self.stack.pop(), self.stack.pop()
-            self.stack.append('true' if int(left) <= int(right) else 'false')
+            right, left = tos.pop(), tos.pop()
+            tos.push('true' if int(left) <= int(right) else 'false')
         elif opcode == BINARY_IN: # FIXME: won't work.
-            right, left = self.stack.pop(), self.stack.pop()
-            self.stack.append('true' if left in right else 'false')
+            right, left = tos.pop(), tos.pop()
+            tos.push('true' if left in right else 'false')
         elif opcode == BINARY_NE:
             pass
         elif opcode == UNARY_NEGATIVE:
-            value = self.stack.pop()
-            self.stack.append(str(-1 * int(value)))
+            value = tos.pop()
+            tos.push(str(-1 * int(value)))
         elif opcode == UNARY_REVERSE:
-            value = self.stack.pop()
-            self.stack.append(str(~int(value)))
+            value = tos.pop()
+            tos.push(str(~int(value)))
         elif opcode == LOGICAL_NOT:
-            value = self.stack.pop()
-            self.stack.append('true' if value == 'false' or value == '[]' or value == '{}'
+            value = tos.pop()
+            tos.push('true' if value == 'false' or value == '[]' or value == '{}'
                     or value == '""' or value == '0' or value == '0.0'else 'false')
         elif opcode == JUMP:
             pc = inst[1]
             return prog_name, pc
         elif opcode == JUMP_IF_TRUE_AND_POP:
-            val = self.stack.pop()
+            val = tos.pop()
             if val == 'true':
                 pc = inst[1]
             else:
                 pc = pc + 1
             return prog_name, pc
         elif opcode == JUMP_IF_FALSE_AND_POP:
-            val = self.stack.pop()
+            val = tos.pop()
             if val == 'false':
                 pc = inst[1]
             else:
                 pc = pc + 1
             return prog_name, pc
         elif opcode == JUMP_IF_TRUE_OR_POP:
-            val = self.stack[-1]
+            val = tos.peek()
             if val == 'true':
                 pc = inst[1]
             else:
-                self.stack.pop()
+                tos.pop()
                 pc = pc + 1
             return prog_name, pc
         elif opcode == JUMP_IF_FALSE_OR_POP:
-            val = self.stack[-1]
+            val = tos.peek()
             if val == 'false':
                 pc = inst[1]
             else:
-                self.stack.pop()
+                tos.pop()
                 pc = pc + 1
             return prog_name, pc
-        elif opcode == CALL_FUNCTION:
-            prog_sym = self.stack.pop()
-            func_bytecode = program.programs[prog_sym]
-            frame = Frame(parent=self.frame)
-            argc = inst[1]
-            i = 0
-            while i < argc:
-                argv_i = func_bytecode.get_symbol(i)
-                frame.save(argv_i, self.stack.pop())
-                i = i + 1
-            self.frame = frame
-            self.stack.append(prog_name)
-            self.stack.append(str(pc))
-            return prog_sym, 0
-        elif opcode == RETURN_VALUE:
-            val = 'null' if len(inst) > 1 and inst[1] == 0 else self.stack.pop()
-            pc = int(self.stack.pop())
-            prog_name = self.stack.pop()
-            self.frame = self.frame.parent
-            self.stack.append(val)
         elif opcode == EXIT:
-            self.exit_code = int(self.stack.pop())
+            self.exit_code = int(tos.pop())
             self.running = False
         else:
             raise Exception("Unknown Bytecode")
@@ -500,7 +531,7 @@ def mainloop(program):
                                   name=name,
                                   program=program,
                                   machine=machine)
-        name, pc = machine.run_code(program, name, pc)
+        name, pc = machine.run_code(name, pc)
     return machine.exit_code
 
 def run(fp):
@@ -523,7 +554,7 @@ def entry_point(argv):
     return run(os.open(filename, os.O_RDONLY, 0777))
 
 def target(driver, *args):
-    driver.exe_name == 'ao'
+    driver.exe_name = 'ao'
     return entry_point, None
 
 def jitpolicy(driver):
