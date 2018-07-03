@@ -411,7 +411,7 @@ class Machine(object):
             tos.push(sym)
         elif opcode == SAVE_VARIABLE:
             sym = bytecode.get_symbol(inst[1])
-            tos.save(sym, tos.pop())
+            tos.save(sym, tos.pop(), tos)
         elif opcode == MAKE_ARRAY:
             argc, args, x = inst[1], [tos.pop() for _ in range(inst[1])], '['
             for i in range(argc):
