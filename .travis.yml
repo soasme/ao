@@ -1,7 +1,23 @@
 language: python
-
-python:
-  - "2.7"
-
+python: pypy
+sudo: required
+dist: trusty
+group: edge
 install: "pip install rpython"
 script: make opt-compile
+jobs:
+  include:
+    - stage: "Main builds"
+      env: BUILD_ARCH=32bit TEST_TYPE=default
+    - env: BUILD_ARCH=64bit TEST_TYPE=default
+before_deploy:
+  - provider: releases
+    api_key:
+      secure: "${GH_TOKEN}"
+    file: "ao"
+    skip_cleanup: true
+    on:
+      repo: soasme/ao
+      tags: true
+after_deploy:
+  - "echo 'deployed!'"
