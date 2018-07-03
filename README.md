@@ -53,7 +53,7 @@ while (c <= 0) {
 }
 ```
 
-Define function is just yet another assignment.
+Defining function is just yet another assignment.
 
 ```
 i = f (j) {
