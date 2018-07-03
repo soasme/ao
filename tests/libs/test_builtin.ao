@@ -1,0 +1,5 @@
+print bool([]);
+print bool([1]);
+if (bool([1])) {
+    print "failed.";
+}

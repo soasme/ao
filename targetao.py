@@ -6,6 +6,8 @@ from rpython.rlib.parsing.ebnfparse import parse_ebnf, make_parse_function
 from rpython.rlib.parsing.parsing import ParseError
 from rpython.rlib.parsing.deterministic import LexerError
 
+from libs.builtin import MODULE
+
 try:
     from rpython.rlib.jit import JitDriver, purefunction
 except ImportError:
@@ -106,6 +108,7 @@ class Program(object):
     def __init__(self):
         self.f_counter = 0
         self.programs = {}
+        self.preludes = {}
 
     def remove_comment(self, source):
         lines = source.splitlines()
@@ -329,8 +332,10 @@ class Frame(object):
     def load(self, key):
         if key in self.bindings:
             return self.bindings[key]
-        if self.parent is not None:
+        elif self.parent is not None:
             return self.parent.load(key)
+        elif key in MODULE:
+            return '@@' + key
         else:
             raise Exception('unknown variable: %s' % key)
     def get_code(self, key):
@@ -346,6 +351,11 @@ class Frame(object):
         return self.evaluations.pop()
     def peek(self):
         return self.evaluations[-1]
+
+class BuiltinContext(object):
+    def __init__(self, tos, bytecode):
+        self.tos = tos
+        self.bytecode = bytecode
 
 class Machine(object):
 
@@ -364,16 +374,20 @@ class Machine(object):
         #print prog_name, pc, inst, tos.evaluations
         if opcode == CALL_FUNCTION:
             func_sym = tos.pop()
-            func_code = tos.get_code(func_sym)
-            parent_frame = func_code.frame
-            func_bytecode = self.program.programs[func_sym]
-            new_frame = Frame(name=func_sym, pc=0, parent=parent_frame)
-            argc = inst[1]
-            for i in range(argc):
-                argv_i_sym = func_bytecode.get_symbol(i)
-                new_frame.save(argv_i_sym, tos.pop(), new_frame)
-            self.stack.append(new_frame)
-            return func_sym, 0
+            if func_sym.startswith('@@'):
+                builtin = MODULE[func_sym[2:]]
+                builtin(BuiltinContext(tos, bytecode))
+            else:
+                func_code = tos.get_code(func_sym)
+                parent_frame = func_code.frame
+                func_bytecode = self.program.programs[func_sym]
+                new_frame = Frame(name=func_sym, pc=0, parent=parent_frame)
+                argc = inst[1]
+                for i in range(argc):
+                    argv_i_sym = func_bytecode.get_symbol(i)
+                    new_frame.save(argv_i_sym, tos.pop(), new_frame)
+                self.stack.append(new_frame)
+                return func_sym, 0
         elif opcode == RETURN_VALUE:
             val = tos.pop()
             old_frame = self.stack.pop()
@@ -520,7 +534,6 @@ class Machine(object):
         else:
             raise Exception("Unknown Bytecode")
         return prog_name, pc + 1
-
 
 def mainloop(program):
     pc = 0
