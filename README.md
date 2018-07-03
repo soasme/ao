@@ -64,6 +64,19 @@ j = i(24);
 print j;
 ```
 
+Function can be closure.
+
+```
+g = f (m) {
+    return f(n) {
+        return m + n;
+    };
+};
+
+plus42 = f(42);
+print plus42(42);
+```
+
 ## Develop
 
 To build `ao` binary, you will need to install Python 2.7 and rpython:
