@@ -353,7 +353,8 @@ class Frame(object):
         return self.evaluations[-1]
 
 class BuiltinContext(object):
-    def __init__(self, tos, bytecode):
+    def __init__(self, machine, tos, bytecode):
+        self.machine = machine
         self.tos = tos
         self.bytecode = bytecode
 
@@ -364,6 +365,7 @@ class Machine(object):
         self.exit_code = 0
         self.stack = [Frame('main')]
         self.program = program
+        self.error = None
 
     def run_code(self, prog_name, pc):
         tos = self.stack[-1]
@@ -376,7 +378,7 @@ class Machine(object):
             func_sym = tos.pop()
             if func_sym.startswith('@@'):
                 builtin = MODULE[func_sym[2:]]
-                builtin(BuiltinContext(tos, bytecode))
+                builtin(BuiltinContext(self, tos, bytecode))
             else:
                 func_code = tos.get_code(func_sym)
                 parent_frame = func_code.frame
@@ -433,8 +435,7 @@ class Machine(object):
             x += '}'
             tos.push(x)
         elif opcode == BINARY_ADD:
-            right, left = tos.pop(), tos.pop()
-            tos.push(str(int(left) + int(right)))
+            MODULE['add'](BuiltinContext(self, tos, bytecode))
         elif opcode == BINARY_SUB:
             right, left = tos.pop(), tos.pop()
             tos.push(str(int(left) - int(right)))
@@ -463,23 +464,22 @@ class Machine(object):
             right, left = tos.pop(), tos.pop()
             tos.push(str(int(left) ^ int(right)))
         elif opcode == BINARY_EQ: # FIXME: support for all types.
-            right, left = tos.pop(), tos.pop()
-            tos.push('true' if int(left) == int(right) else 'false')
+            MODULE['eq'](BuiltinContext(self, tos, bytecode))
         elif opcode == BINARY_NE:
             right, left = tos.pop(), tos.pop()
-            tos.push('true' if int(left) != int(right) else 'false')
+            tos.push('true' if left != right else 'false')
         elif opcode == BINARY_GT:
             right, left = tos.pop(), tos.pop()
-            tos.push('true' if int(left) > int(right) else 'false')
+            tos.push('true' if left > right else 'false')
         elif opcode == BINARY_GE:
             right, left = tos.pop(), tos.pop()
-            tos.push('true' if int(left) >= int(right) else 'false')
+            tos.push('true' if left >= right else 'false')
         elif opcode == BINARY_LT:
             right, left = tos.pop(), tos.pop()
-            tos.push('true' if int(left) < int(right) else 'false')
+            tos.push('true' if left < right else 'false')
         elif opcode == BINARY_LE:
             right, left = tos.pop(), tos.pop()
-            tos.push('true' if int(left) <= int(right) else 'false')
+            tos.push('true' if left <= right else 'false')
         elif opcode == BINARY_IN: # FIXME: won't work.
             right, left = tos.pop(), tos.pop()
             tos.push('true' if left in right else 'false')
@@ -545,6 +545,13 @@ def mainloop(program):
                                   program=program,
                                   machine=machine)
         name, pc = machine.run_code(name, pc)
+        if machine.error is not None:
+            print('traceback: %s' % machine.error)
+            for frame in machine.stack:
+                print('%s %d' % (frame.name, frame.pc))
+            machine.exit_code = 1
+            machine.running = False
+            break
     return machine.exit_code
 
 def run(fp):

@@ -108,7 +108,9 @@ The AO Philosophy:
     * AO aims to provie simple syntax so that new learners can quickly start learning programming.
     * No matter what a mess the implementation is, keep the interface simple.
 * Correctness.
-    * Make it right. If found one, fix it. :)
+    * Make it right. Fix the bug if we catch one. :)
+* Battery-included.
+    * Softwares are meant to solve some problem. AO ships with a set of handy libraries.
 
 ## License
 

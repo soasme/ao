@@ -1,5 +1,36 @@
-print bool([]);
-print bool([1]);
-if (bool([1])) {
-    print "failed.";
-}
+assert(bool([]) == false);
+
+assert(bool([1]) == true);
+
+assert(bool({}) == false);
+
+assert(bool({"key": "value"}) == true);
+
+assert(bool(true) == true);
+
+assert(bool(false) == false);
+
+assert(bool(null) == false);
+
+assert(bool(1) == true);
+
+assert(bool(0) == false);
+
+# TODO:... please add more bool tests.
+
+assert(type(true) == "bool");
+
+assert(type(false) == "bool");
+
+# TODO:... please add more type tests.
+
+assert(add(1, 1) == 2);
+assert(add(1.0, 1.0) == 2.0);
+assert(add(1.0, 1) == 2.0);
+assert(add(1, 1.0) == 2.0);
+assert(add("1", "2") == "12");
+assert(add("1", 2) == "12");
+assert(1 + 1 == 2);
+assert(1.0 + 1.0 == 2.0);
+assert(1 + 1.0 == 2.0);
+assert(1.0 + 1 == 2.0);
