@@ -6,3 +6,6 @@ opt-compile:
 
 debug-example:
 	PYPYLOG=jit-log-opt:logfile ./targetao-c examples/test.ao
+
+run-tests:
+	for i in tests/*/*.ao; do python targetao.py $$i && echo "$$i passed."; done

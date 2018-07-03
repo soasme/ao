@@ -4,17 +4,18 @@ sudo: required
 dist: trusty
 group: edge
 install: "pip install rpython"
-script: make opt-compile
-jobs:
-  include:
-    - stage: "Main builds"
-      env: BUILD_ARCH=32bit TEST_TYPE=default
-    - env: BUILD_ARCH=64bit TEST_TYPE=default
+script: make run-tests && make opt-compile
+#jobs:
+  #include:
+    #- stage: "Main builds"
+      #env: BUILD_ARCH=32bit TEST_TYPE=default
+    #- env: BUILD_ARCH=64bit TEST_TYPE=default
 before_deploy:
   - provider: releases
     api_key:
       secure: "${GH_TOKEN}"
-    file: "ao"
+    file:
+      - "ao"
     skip_cleanup: true
     on:
       repo: soasme/ao

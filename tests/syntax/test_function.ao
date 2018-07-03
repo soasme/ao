@@ -1,2 +1,2 @@
 g = f() { return 1 + 1; };
-print g();
+assert(g() == 2);
