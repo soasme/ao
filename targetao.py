@@ -400,7 +400,7 @@ class Machine(object):
         inst = bytecode.get_instruction(pc)
         opcode = inst[0]
         #print prog_name, pc, inst, tos.evaluations
-        print get_location(pc, prog_name, self.program)
+        #print get_location(pc, prog_name, self.program)
         if opcode == CALL_FUNCTION:
             func_sym = tos.pop()
             if func_sym.startswith('@@'):
@@ -565,9 +565,7 @@ class Machine(object):
 def crash_stack(machine):
     print >> sys.stderr, 'Traceback: %s' % machine.error
     for frame in machine.stack:
-        lineno = frame.bytecode.get_pc_position(frame.pc)
-        print >> sys.stderr, 'File %s, line %d' % (frame.str(), lineno)
-        print >> sys.stderr, '  %s' % frame.bytecode.source.splitlines()[lineno]
+        print >> sys.stderr, get_location(frame.pc, frame.name, machine.program)
     machine.exit_code = 1
     machine.running = False
 
