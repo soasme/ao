@@ -9,6 +9,11 @@ print [1, 2];
 print [1, 2, ];
 print {};
 print {"key": "value"};
+print [1,
+2,
+3];
+print {"key":
+"value","kkk": "vvv"};
 
 z = f(v){return v;};
 print z("hello world");

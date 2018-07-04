@@ -5,27 +5,39 @@ import json
 from rpython.rlib.parsing.ebnfparse import parse_ebnf, make_parse_function
 from rpython.rlib.parsing.parsing import ParseError
 from rpython.rlib.parsing.deterministic import LexerError
+from rpython.rlib.jit import JitDriver, purefunction
 
 from libs.builtin import MODULE
 
-try:
-    from rpython.rlib.jit import JitDriver, purefunction
-except ImportError:
-    class JitDriver(object):
-        def __init__(self,**kw): pass
-        def jit_merge_point(self,**kw): pass
-        def can_enter_jit(self,**kw): pass
-    def purefunction(f): return f
+EXIT = 0;               PRINT = 1;              LOAD_LITERAL = 2;
+LOAD_FUNCTION = 3;      LOAD_VARIABLE = 4;      SAVE_VARIABLE = 5;
+CALL_FUNCTION = 6;      RETURN_VALUE = 7;       MAKE_ARRAY = 8;
+MAKE_OBJECT = 9;        JUMP = 10;              JUMP_IF_TRUE_AND_POP = 11;
+BINARY_ADD = 12;        BINARY_SUB = 13;        JUMP_IF_FALSE_AND_POP = 14;
+BINARY_MUL = 15;        BINARY_DIV = 16;        JUMP_IF_TRUE_OR_POP = 17;
+BINARY_MOD = 18;        BINARY_LSHIFT = 19;     JUMP_IF_FALSE_OR_POP = 20;
+BINARY_LSHIFT = 21;     BINARY_RSHIFT = 22;     BINARY_AND = 23;
+BINARY_OR = 24;         BINARY_XOR = 25;        BINARY_EQ = 26;
+BINARY_NE = 27;         BINARY_GT = 28;         BINARY_GE = 29;
+BINARY_LT = 30;         BINARY_LE = 31;         BINARY_IN = 32;
+UNARY_NEGATIVE = 33;    UNARY_POSITIVE = 34;    UNARY_REVERSE = 35;
+LOGICAL_NOT = 36;
 
-EXIT, PRINT, LOAD_LITERAL, LOAD_FUNCTION, LOAD_VARIABLE, SAVE_VARIABLE, \
-        CALL_FUNCTION, RETURN_VALUE, MAKE_ARRAY, MAKE_OBJECT, \
-        JUMP, JUMP_IF_TRUE_AND_POP, JUMP_IF_FALSE_AND_POP, \
-        JUMP_IF_TRUE_OR_POP, JUMP_IF_FALSE_OR_POP, \
-        BINARY_ADD, BINARY_SUB, BINARY_MUL, BINARY_DIV, BINARY_MOD, \
-        BINARY_LSHIFT, BINARY_RSHIFT, BINARY_AND, BINARY_OR, BINARY_XOR, \
-        BINARY_EQ, BINARY_NE, BINARY_GT, BINARY_GE, BINARY_LT, BINARY_LE, \
-        BINARY_IN, UNARY_NEGATIVE, UNARY_POSITIVE, UNARY_REVERSE, LOGICAL_NOT, \
-        = range(36)
+CODES = """
+    EXIT            PRINT             LOAD_LITERAL
+    LOAD_FUNCTION   LOAD_VARIABLE     SAVE_VARIABLE
+    CALL_FUNCTION   RETURN_VALUE      MAKE_ARRAY
+    MAKE_OBJECT     JUMP              JUMP_IF_TRUE_AND_POP
+    BINARY_ADD      BINARY_SUB        JUMP_IF_FALSE_AND_POP
+    BINARY_MUL      BINARY_DIV        JUMP_IF_TRUE_OR_POP
+    BINARY_MOD      BINARY_LSHIFT     JUMP_IF_FALSE_OR_POP
+    BINARY_LSHIFT   BINARY_RSHIFT     BINARY_AND
+    BINARY_OR       BINARY_XOR        BINARY_EQ
+    BINARY_NE       BINARY_GT         BINARY_GE
+    BINARY_LT       BINARY_LE         BINARY_IN
+    UNARY_NEGATIVE  UNARY_POSITIVE    UNARY_REVERSE
+    LOGICAL_NOT
+""".split()
 
 BINARY_OP = {
     '==': BINARY_EQ, '!=': BINARY_NE, '>': BINARY_GT, '>=': BINARY_GE,
@@ -35,17 +47,25 @@ BINARY_OP = {
 }
 
 def get_location(pc, name, program):
-    return "%s:%s:%s" % (name, pc, program.programs[name].get_instruction(pc))
+    lineno = program.programs[name].get_pc_position(pc)
+    source = program.programs[name].source.splitlines()[lineno]
+    instruction = program.programs[name].instructions[pc]
+    op = CODES[instruction[0]]
+    return "Code %s, line %d\n  %s\n  INSTRUCTION: %s %s" % (name, lineno+1, source, op, instruction)
 
 jitdriver = JitDriver(greens=['pc', "name", 'program', ], reds=['machine'],
         get_printable_location=get_location)
 
+
 class Bytecode(object):
 
-    def __init__(self, instructions, literals, symbols):
+    def __init__(self, instructions, literals, symbols, filename=None, source=None):
         self.instructions = instructions # list of [op(int), ...]
         self.literals = literals # list of strings
         self.symbols = symbols # list of strings
+        self.source = source
+        self.filename = filename
+        self.positions = {}
 
     def get_instruction(self, pc):
         return self.instructions[pc]
@@ -55,6 +75,13 @@ class Bytecode(object):
 
     def get_literal(self, index):
         return self.literals[index]
+
+    def emit(self, instruction, ast):
+        self.instructions.append(instruction)
+        self.positions[len(self.instructions) - 1] = ast.getsourcepos().lineno
+
+    def get_pc_position(self, pc):
+        return self.positions[pc]
 
 EBNF = """
 STRING: "\\"[^\\\\"]*\\"";
@@ -83,8 +110,8 @@ term_op: <"*"> | <"/"> | <"%">;
 factor: factor_op factor | <primary_expression>;
 factor_op: <"+"> | <"-"> | <"~">;
 primary_expression: <f> | <apply> | <IDENTIFIER> | <STRING> | <NUMBER> | <object> | <array> | <BOOLEAN> | <NULL>;
-object: ["{"] (entry [","])* entry* ["}"];
-array: ["["] (expr [","])* expr* ["]"];
+object: "{" (entry [","])* entry* ["}"];
+array: "[" (expr [","])* expr* ["]"];
 entry: STRING [":"] expr;
 let: IDENTIFIER ["="] expr;
 apply: IDENTIFIER ["("] (expr [","])* expr* [")"];
@@ -124,8 +151,9 @@ class Program(object):
         except LexerError as e:
             print(e.nice_error_message(filename))
         else:
-            self.programs['file://' + filename] = Bytecode([], [], [])
-            self.scan_ast('file://' + filename, ast)
+            target = filename
+            self.programs[target] = Bytecode([], [], [], filename=target, source=source)
+            self.scan_ast(target, ast)
 
     def scan_ast(self, target, ast):
         if ast.symbol == 'main':
@@ -135,10 +163,10 @@ class Program(object):
             self.scan_ast(target, ast.children[0])
         elif ast.symbol == 'print':
             self.scan_ast(target, ast.children[0])
-            self.programs[target].instructions.append([PRINT])
+            self.programs[target].emit([PRINT], ast)
         elif ast.symbol == 'return':
             self.scan_ast(target, ast.children[0])
-            self.programs[target].instructions.append([RETURN_VALUE])
+            self.programs[target].emit([RETURN_VALUE], ast)
         elif ast.symbol == 'let':
             identifier = ast.children[0]
             right = ast.children[1]
@@ -146,23 +174,23 @@ class Program(object):
             if identifier.additional_info not in self.programs[target].symbols:
                 self.programs[target].symbols.append(identifier.additional_info)
             index = self.programs[target].symbols.index(identifier.additional_info)
-            self.programs[target].instructions.append([SAVE_VARIABLE, index])
+            self.programs[target].emit([SAVE_VARIABLE, index], ast)
         elif ast.symbol == 'if':
             end_jumping_indexes = []
             predicate = self.scan_ast(target, ast.children[0])
-            self.programs[target].instructions.append([JUMP_IF_FALSE_AND_POP, 0])
+            self.programs[target].emit([JUMP_IF_FALSE_AND_POP, 0], ast)
             next_branching_index = len(self.programs[target].instructions) - 1
             true_block = self.scan_ast(target, ast.children[1])
-            self.programs[target].instructions.append([JUMP, 0])
+            self.programs[target].emit([JUMP, 0], ast)
             end_jumping_indexes.append(len(self.programs[target].instructions) - 1)
             self.programs[target].instructions[next_branching_index][1] = len(self.programs[target].instructions)
             for condition in ast.children[2:]:
                 if condition.symbol == 'elif':
                     cond_predicate = self.scan_ast(target, condition.children[0])
-                    self.programs[target].instructions.append([JUMP_IF_FALSE_AND_POP, 0])
+                    self.programs[target].emit([JUMP_IF_FALSE_AND_POP, 0], ast)
                     next_branching_index = len(self.programs[target].instructions) - 1
                     cond_block = self.scan_ast(target, condition.children[1])
-                    self.programs[target].instructions.append([JUMP, 0])
+                    self.programs[target].emit([JUMP, 0], ast)
                     end_jumping_indexes.append(len(self.programs[target].instructions) - 1)
                     self.programs[target].instructions[next_branching_index][1] = len(self.programs[target].instructions)
                 elif condition.symbol == 'else':
@@ -172,10 +200,10 @@ class Program(object):
         elif ast.symbol == 'while':
             start = len(self.programs[target].instructions)
             predicate = self.scan_ast(target, ast.children[0])
-            self.programs[target].instructions.append([JUMP_IF_FALSE_AND_POP, 0])
+            self.programs[target].emit([JUMP_IF_FALSE_AND_POP, 0], ast)
             index = len(self.programs[target].instructions) - 1
             block = self.scan_ast(target, ast.children[1])
-            self.programs[target].instructions.append([JUMP, start])
+            self.programs[target].emit([JUMP, start], ast)
             self.programs[target].instructions[index][1] = len(self.programs[target].instructions)
         elif ast.symbol == 'apply':
             for param in ast.children[1:]:
@@ -183,7 +211,7 @@ class Program(object):
             f_var = ast.children[0]
             self.scan_ast(target, f_var) # load function first
             argc = len(ast.children[1:]) # call function with argc(nubmer of args)
-            self.programs[target].instructions.append([CALL_FUNCTION, argc])
+            self.programs[target].emit([CALL_FUNCTION, argc], ast)
         elif ast.symbol == 'expr':
             self.scan_ast(target, ast.children[0])
         elif ast.symbol == 'test':
@@ -193,7 +221,7 @@ class Program(object):
             if len(ast.children) > 1:
                 indexes = []
                 for and_expr in ast.children[1:]:
-                    self.programs[target].instructions.append([JUMP_IF_TRUE_OR_POP, 0])
+                    self.programs[target].emit([JUMP_IF_TRUE_OR_POP, 0], ast)
                     indexes.append(len(self.programs[target].instructions) - 1)
                     self.scan_ast(target, and_expr)
                 end = len(self.programs[target].instructions)
@@ -204,7 +232,7 @@ class Program(object):
             if len(ast.children) > 1:
                 indexes = []
                 for and_expr in ast.children[1:]:
-                    self.programs[target].instructions.append([JUMP_IF_FALSE_OR_POP, 0])
+                    self.programs[target].emit([JUMP_IF_FALSE_OR_POP, 0], ast)
                     indexes.append(len(self.programs[target].instructions) - 1)
                     self.scan_ast(target, and_expr)
                 end = len(self.programs[target].instructions)
@@ -212,93 +240,94 @@ class Program(object):
                     self.programs[target].instructions[index][1] = end
         elif ast.symbol == 'not_test':
             self.scan_ast(target, ast.children[0])
-            self.programs[target].instructions.append([LOGICAL_NOT])
+            self.programs[target].emit([LOGICAL_NOT], ast)
         elif ast.symbol == 'comparison':
             self.scan_ast(target, ast.children[0])
             if len(ast.children) > 1:
                 self.scan_ast(target, ast.children[2])
                 op = BINARY_OP[ast.children[1].additional_info]
-                self.programs[target].instructions.append([op])
+                self.programs[target].emit([op], ast)
         elif ast.symbol == 'or_expr':
             self.scan_ast(target, ast.children[0])
             if len(ast.children) > 1:
                 for xor_expr in ast.children[1:]:
                     self.scan_ast(target, xor_expr)
-                    self.programs[target].instructions.append([BINARY_OR])
+                    self.programs[target].emit([BINARY_OR], ast)
         elif ast.symbol == 'xor_expr':
             self.scan_ast(target, ast.children[0])
             if len(ast.children) > 1:
                 for and_expr in ast.children[1:]:
                     self.scan_ast(target, and_expr)
-                    self.programs[target].instructions.append([BINARY_XOR])
+                    self.programs[target].emit([BINARY_XOR], ast)
         elif ast.symbol == 'and_expr':
             self.scan_ast(target, ast.children[0])
             if len(ast.children) > 1:
                 for shift_expr in ast.children[1:]:
                     self.scan_ast(target, shift_expr)
-                    self.programs[target].instructions.append([BINARY_AND])
+                    self.programs[target].emit([BINARY_AND], ast)
         elif ast.symbol == 'shift_expr':
             self.scan_ast(target, ast.children[0])
             if len(ast.children) > 1:
                 for index in range(1, len(ast.children) - 1, 2):
                     self.scan_ast(target, ast.children[index + 1])
                     op = BINARY_OP[ast.children[index].additional_info]
-                    self.programs[target].instructions.append([op])
+                    self.programs[target].emit([op], ast)
         elif ast.symbol == 'arith_expr':
             self.scan_ast(target, ast.children[0])
             if len(ast.children) > 1:
                 for index in range(1, len(ast.children) - 1, 2):
                     self.scan_ast(target, ast.children[index + 1])
                     op = BINARY_OP[ast.children[index].additional_info]
-                    self.programs[target].instructions.append([op])
+                    self.programs[target].emit([op], ast)
         elif ast.symbol == 'term':
             self.scan_ast(target, ast.children[0])
             if len(ast.children) > 1:
                 for index in range(1, len(ast.children) - 1, 2):
                     self.scan_ast(target, ast.children[index + 1])
                     op = BINARY_OP[ast.children[index].additional_info]
-                    self.programs[target].instructions.append([op])
+                    self.programs[target].emit([op], ast)
         elif ast.symbol == 'factor':
             if len(ast.children) == 2:
                 self.scan_ast(target, ast.children[1])
                 if ast.children[0].additional_info == '+':
-                    self.programs[target].instructions.append([UNARY_POSITIVE])
+                    self.programs[target].emit([UNARY_POSITIVE], ast)
                 elif ast.children[0].additional_info == '-':
-                    self.programs[target].instructions.append([UNARY_NEGATIVE])
+                    self.programs[target].emit([UNARY_NEGATIVE], ast)
                 elif ast.children[0].additional_info == '~':
-                    self.programs[target].instructions.append([UNARY_REVERSE])
+                    self.programs[target].emit([UNARY_REVERSE], ast)
         elif ast.symbol == 'f':
             self.f_counter = self.f_counter + 1
             f_target = '@%d' % self.f_counter
             if f_target not in self.programs[target].symbols:
                 self.programs[target].symbols.append(f_target)
             params = [p.additional_info for p in ast.children if p.symbol == 'IDENTIFIER']
-            program = Bytecode(instructions=[], literals=[], symbols=params)
+            program = Bytecode(instructions=[], literals=[], symbols=params,
+                    filename=target, source=self.programs[target].source)
             self.programs[f_target] = program
             self.scan_ast(f_target, ast.children[len(params)])
-            if program.instructions[-1][0] != RETURN_VALUE: program.instructions.append([RETURN_VALUE, 0])
+            if program.instructions[-1][0] != RETURN_VALUE: program.emit([RETURN_VALUE], ast)
             index = self.programs[target].symbols.index(f_target)
-            self.programs[target].instructions.append([LOAD_FUNCTION, index])
+            self.programs[target].emit([LOAD_FUNCTION, index], ast)
         elif ast.symbol == 'IDENTIFIER':
             if ast.additional_info not in self.programs[target].symbols:
                 self.programs[target].symbols.append(ast.additional_info)
             index = self.programs[target].symbols.index(ast.additional_info)
-            self.programs[target].instructions.append([LOAD_VARIABLE, index])
+            self.programs[target].emit([LOAD_VARIABLE, index], ast)
         elif ast.symbol in ('NULL', 'STRING', 'BOOLEAN', 'NUMBER'):
             self.programs[target].literals.append(ast.additional_info)
-            self.programs[target].instructions.append([
-                LOAD_LITERAL, len(self.programs[target].literals) - 1])
+            self.programs[target].emit([
+                LOAD_LITERAL, len(self.programs[target].literals) - 1], ast)
         elif ast.symbol == 'array':
-            for child in ast.children:
+            for child in ast.children[1:]:
                 self.scan_ast(target, child)
-            self.programs[target].instructions.append([MAKE_ARRAY, len(ast.children)])
+            self.programs[target].emit([MAKE_ARRAY, len(ast.children[1:])], ast)
         elif ast.symbol == 'object':
-            for entry in ast.children:
+            for entry in ast.children[1:]:
                 key = entry.children[0]
                 self.scan_ast(target, key)
                 value = entry.children[1]
                 self.scan_ast(target, value)
-            self.programs[target].instructions.append([MAKE_OBJECT, len(ast.children)])
+            self.programs[target].emit([MAKE_OBJECT, len(ast.children[1:])], ast)
         elif ast.symbol == 'block':
             for stmt in ast.children:
                 self.scan_ast(target, stmt)
@@ -371,6 +400,7 @@ class Machine(object):
         inst = bytecode.get_instruction(pc)
         opcode = inst[0]
         #print prog_name, pc, inst, tos.evaluations
+        print get_location(pc, prog_name, self.program)
         if opcode == CALL_FUNCTION:
             func_sym = tos.pop()
             if func_sym.startswith('@@'):
@@ -533,15 +563,17 @@ class Machine(object):
         return prog_name, pc + 1
 
 def crash_stack(machine):
-    print >> sys.stderr, machine.error
+    print >> sys.stderr, 'Traceback: %s' % machine.error
     for frame in machine.stack:
-        print >> sys.stderr, frame.str(), frame.bytecode
+        lineno = frame.bytecode.get_pc_position(frame.pc)
+        print >> sys.stderr, 'File %s, line %d' % (frame.str(), lineno)
+        print >> sys.stderr, '  %s' % frame.bytecode.source.splitlines()[lineno]
     machine.exit_code = 1
     machine.running = False
 
 def mainloop(filename, program):
     pc = 0
-    name = 'file://' + filename
+    name = filename
     machine = Machine(name, program)
     while pc < len(program.programs[name].instructions) and machine.running:
         jitdriver.jit_merge_point(pc=pc, name=name, program=program, machine=machine)
@@ -553,7 +585,11 @@ def mainloop(filename, program):
 
 def run(filename):
     program_contents = ""
-    fp = os.open(filename, os.O_RDONLY, 0777)
+    try:
+        fp = os.open(filename, os.O_RDONLY, 0777)
+    except OSError as e:
+        print >> sys.stderr, str(e)
+        return 1
     while True:
         read = os.read(fp, 4096)
         if len(read) == 0: break
@@ -565,9 +601,11 @@ def run(filename):
 
 def entry_point(argv):
     try:
-        return run(argv[1])
+        filename = argv[1]
     except IndexError:
-        return error(1, "You must supply a filename")
+        print >> sys.stderr, "You must supply a filename"
+        return 1
+    return run(filename)
 
 def target(driver, *args):
     driver.exe_name = 'ao'

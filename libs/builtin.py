@@ -20,7 +20,7 @@ def _bool(value):
 def builtin_assert(ctx):
     value = ctx.tos.pop()
     if _bool(value) == 'false':
-        ctx.machine.error = 'assertion error: %s' % value
+        ctx.machine.error = 'assertion error'
 
 def _type(value):
     if value.startswith('"') and value.endswith('"'):
