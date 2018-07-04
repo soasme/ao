@@ -114,19 +114,18 @@ class Program(object):
         lines = source.splitlines()
         return '\n'.join([l for l in lines if not l.lstrip().startswith('#')])
 
-    def parse_main(self, source):
+    def parse_main(self, filename, source):
         try:
             source = self.remove_comment(source)
             tree = parse_ebnf(source)
             ast = to_ast.transform(tree)
         except ParseError as e:
-            print(e.nice_error_message('main', source))
-            return
+            print(e.nice_error_message(filename, source))
         except LexerError as e:
-            print(e.nice_error_message('main'))
-            return
-        self.programs["main"] = Bytecode([], [], [])
-        self.scan_ast("main", ast)
+            print(e.nice_error_message(filename))
+        else:
+            self.programs['file://' + filename] = Bytecode([], [], [])
+            self.scan_ast('file://' + filename, ast)
 
     def scan_ast(self, target, ast):
         if ast.symbol == 'main':
@@ -304,11 +303,6 @@ class Program(object):
             for stmt in ast.children:
                 self.scan_ast(target, stmt)
 
-def parse(source):
-    program = Program()
-    program.parse_main(source)
-    return program
-
 class Code(object):
 
     def __init__(self, name, environment_frame):
@@ -316,13 +310,14 @@ class Code(object):
         self.frame = environment_frame
 
 class Frame(object):
-    def __init__(self, name, pc=0, parent=None):
+    def __init__(self, name, pc=0, parent=None, bytecode=None):
         self.bindings = {}
         self.evaluations = []
         self.codes = {}
         self.parent = parent
         self.pc = pc
         self.name = name
+        self.bytecode = bytecode
     def save_pc(self, pc):
         self.pc = pc
     def save(self, key, value, frame=None):
@@ -351,6 +346,8 @@ class Frame(object):
         return self.evaluations.pop()
     def peek(self):
         return self.evaluations[-1]
+    def str(self):
+        return '%s' % self.name
 
 class BuiltinContext(object):
     def __init__(self, machine, tos, bytecode):
@@ -360,12 +357,12 @@ class BuiltinContext(object):
 
 class Machine(object):
 
-    def __init__(self, program):
+    def __init__(self, entry, program):
         self.running = True
         self.exit_code = 0
-        self.stack = [Frame('main')]
         self.program = program
         self.error = None
+        self.stack = [Frame(entry, bytecode=program.programs[entry])]
 
     def run_code(self, prog_name, pc):
         tos = self.stack[-1]
@@ -383,7 +380,7 @@ class Machine(object):
                 func_code = tos.get_code(func_sym)
                 parent_frame = func_code.frame
                 func_bytecode = self.program.programs[func_sym]
-                new_frame = Frame(name=func_sym, pc=0, parent=parent_frame)
+                new_frame = Frame(name=func_sym, pc=0, parent=parent_frame, bytecode=func_bytecode)
                 argc = inst[1]
                 for i in range(argc):
                     argv_i_sym = func_bytecode.get_symbol(i)
@@ -535,22 +532,22 @@ class Machine(object):
             raise Exception("Unknown Bytecode")
         return prog_name, pc + 1
 
-def mainloop(program):
+def crash_stack(machine):
+    print >> sys.stderr, machine.error
+    for frame in machine.stack:
+        print >> sys.stderr, frame.str(), frame.bytecode
+    machine.exit_code = 1
+    machine.running = False
+
+def mainloop(filename, program):
     pc = 0
-    name = "main"
-    machine = Machine(program)
+    name = 'file://' + filename
+    machine = Machine(name, program)
     while pc < len(program.programs[name].instructions) and machine.running:
-        jitdriver.jit_merge_point(pc=pc,
-                                  name=name,
-                                  program=program,
-                                  machine=machine)
+        jitdriver.jit_merge_point(pc=pc, name=name, program=program, machine=machine)
         name, pc = machine.run_code(name, pc)
         if machine.error is not None:
-            print('traceback: %s' % machine.error)
-            for frame in machine.stack:
-                print('%s %d' % (frame.name, frame.pc))
-            machine.exit_code = 1
-            machine.running = False
+            crash_stack(machine)
             break
     return machine.exit_code
 
@@ -559,19 +556,18 @@ def run(filename):
     fp = os.open(filename, os.O_RDONLY, 0777)
     while True:
         read = os.read(fp, 4096)
-        if len(read) == 0:
-            break
+        if len(read) == 0: break
         program_contents += read
     os.close(fp)
-    program = parse(program_contents)
-    return mainloop(program)
+    program = Program()
+    program.parse_main(filename, program_contents)
+    return mainloop(filename, program)
 
 def entry_point(argv):
     try:
         return run(argv[1])
     except IndexError:
-        print >> sys.stderr, "You must supply a filename"
-        return 1
+        return error(1, "You must supply a filename")
 
 def target(driver, *args):
     driver.exe_name = 'ao'
