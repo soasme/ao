@@ -150,7 +150,8 @@ class Compiler(RPythonVisitor):
             print(e.nice_error_message(filename))
         else:
             self.target = filename
-            self.programs[self.target] = Bytecode([], [], [], filename=target, source=source)
+            self.programs[self.target] = Bytecode([], [], [],
+                    filename=filename, source=source)
             self.dispatch(ast)
 
     def emit(self, inst, ast):
@@ -251,11 +252,11 @@ class Compiler(RPythonVisitor):
             self.dispatch(ast.children[2])
             self.emit([BINARY_OP[ast.children[1].additional_info]], ast)
 
-    def _visit_bin(self, opcode, ast):
+    def _visit_bin(self, inst, ast):
         self.dispatch(ast.children[0])
         for expr in ast.children[1:]:
             self.dispatch(expr)
-            self.emit([opcode], ast)
+            self.emit(inst, ast)
 
     def visit_or_expr(self, ast): self._visit_bin([BINARY_OR], ast)
     def visit_xor_expr(self, ast): self._visit_bin([BINARY_XOR], ast)
@@ -291,7 +292,7 @@ class Compiler(RPythonVisitor):
             self.programs[target].symbols.append(f_target)
         params = [p.additional_info for p in ast.children if p.symbol == 'IDENTIFIER']
         program = Bytecode(instructions=[], literals=[], symbols=params,
-                filename=self.target, source=self.programs[target].source)
+                filename=self.target, source=self.programs[self.target].source)
         self.programs[f_target] = program
         self.target = f_target
         self.dispatch(ast.children[len(params)])
@@ -567,9 +568,9 @@ class Machine(object):
         return prog_name, pc + 1
 
 def crash_stack(machine):
-    print >> sys.stderr, 'Traceback: %s' % machine.error
+    print 'Traceback: %s' % machine.error
     for frame in machine.stack:
-        print >> sys.stderr, get_location(frame.pc, frame.name, machine.program)
+        print get_location(frame.pc, frame.name, machine.program)
     machine.exit_code = 1
     machine.running = False
 
@@ -594,7 +595,7 @@ def run(filename):
     try:
         fp = os.open(filename, os.O_RDONLY, 0777)
     except OSError as e:
-        print >> sys.stderr, str(e)
+        print str(e)
         return 1
     while True:
         read = os.read(fp, 4096)
@@ -607,7 +608,7 @@ def entry_point(argv):
     try:
         filename = argv[1]
     except IndexError:
-        print >> sys.stderr, "You must supply a filename"
+        print "You must supply a filename"
         return 1
     return run(filename)
 
