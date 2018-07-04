@@ -554,8 +554,9 @@ def mainloop(program):
             break
     return machine.exit_code
 
-def run(fp):
+def run(filename):
     program_contents = ""
+    fp = os.open(filename, os.O_RDONLY, 0777)
     while True:
         read = os.read(fp, 4096)
         if len(read) == 0:
@@ -567,11 +568,10 @@ def run(fp):
 
 def entry_point(argv):
     try:
-        filename = argv[1]
+        return run(argv[1])
     except IndexError:
-        print "You must supply a filename"
+        print >> sys.stderr, "You must supply a filename"
         return 1
-    return run(os.open(filename, os.O_RDONLY, 0777))
 
 def target(driver, *args):
     driver.exe_name = 'ao'
