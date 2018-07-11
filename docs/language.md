@@ -4,9 +4,9 @@ AO aims to provide simple syntax. This page defines AO syntax.
 
 ## Int Literals
 
-|Syntax|Examples|Description|
-|------|--------|-----------|
-|`\-?(0|[1-9][0-9]*)`|0, -42, 100|Evaluation of a number literal yields a numeric value.|
+|Syntax               |Examples     |Description|
+|---------------------|-------------|-----------|
+|`\-?(0|[1-9][0-9]*)` |0, -42, 100  |Evaluation of a number literal yields a numeric value.|
 
 ## Bool Literals
 
