@@ -1,11 +1,10 @@
 # AO
 
 AO, pronouncing as A-O, is a tiny interpreter language.
-Its runtime gets implemented in only 500+ lines of code.
 
 It supports:
 
-* JSON types: `null`, `true`, `false`, `0`, `1.0`, `"string"`, `[1, 2]`, `{"key": "value"}`.
+* JSON as primitive types: `null`, `true`, `false`, `0`, `1.0`, `"string"`, `[1, 2]`, `{"key": "value"}`.
 * Assignment: `x = 1;`.
 * Function: `double = f (a) { return a * a; };`.
 * Arithmetic: `+`, `-`, `*`, `/`, `%`, `<<`, `>>`, `&`, `|`, `~`.
@@ -18,7 +17,7 @@ If you want to get an AO executable, please read `Develop` to compile interprete
 
 ## A Glance of AO
 
-All builtin types are JSON based values, plus Lambda.
+All builtin types are JSON based values, expect Function.
 No class, no struct, no trait, no interface, no ..., etc.
 
 ```
@@ -51,6 +50,10 @@ while (c <= 0) {
     print c;
     c = c - 1;
 }
+
+while (true) {
+    print "loop";
+}
 ```
 
 Defining function is just yet another assignment.
@@ -79,7 +82,7 @@ print plus42(42);
 
 ## Develop
 
-To build `ao` binary, you will need to install Python 2.7 and rpython:
+To build `ao` binary, you will need to install Python 2.7, virtualenv and rpython:
 
 ```
 $ virtualenv venv
@@ -110,7 +113,7 @@ The AO Philosophy:
 * Correctness.
     * Make it right. Fix the bug if we catch one. :)
 * Battery-included.
-    * Softwares are meant to solve some problem. AO ships with a set of handy libraries.
+    * Softwares are meant to solve problems. AO ships with a set of handy libraries including text processing, binary data processing, time processing, a set of advanced data structures and algorithms, mathmatical calculation, functional programming, system programming, serialization and deserialization, protocols and formats, logging, web programming, game programming, concurrency, IPC and networking, parsers for different languages, multimedia programming, i18n, GUI programming, testing and debugging packaging and distribution, clients for data-intensive systems, science programming, shell programming, etc.
 
 ## License
 
