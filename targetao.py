@@ -199,7 +199,7 @@ class Compiler(RPythonVisitor):
             self.dispatch(cond)
             if cond.symbol == 'elif': ends.append(self._emit_future(ast))
         for end in ends:
-            self._set_future(pred_fut, [JUMP, self._get_instructions_size()])
+            self._set_future(end, [JUMP, self._get_instructions_size()])
 
     def visit_elif(self, ast):
         self.dispatch(ast.children[0])
