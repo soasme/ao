@@ -245,7 +245,26 @@ For array, it also allow `&` for mapping values to a function, allow `|` for fil
 [2, 4]
 ```
 
+## Error Handling
+
+`value or error = ...` can help you deal with errors.
+
+```
+my_function = f() {
+    raise("customized-error");
+};
+
+value or error = my_function();
+if (error == "customized-error") {
+    value = 0;
+} else {
+    raise(error);
+}
+```
+
 ## Builtin Functions
+
+### type
 
 `type(value)` return string of type name:
 
@@ -273,4 +292,77 @@ For array, it also allow `&` for mapping values to a function, allow `|` for fil
 
 [8]: type(f () { return null; })
 "function"
+```
+
+### get
+
+`get(value, selector)` return element from value by selector:
+
+```
+[1]: get([1, 2, 3], 0)
+1
+
+[2]: get([1, 2, 3], 3)
+Traceback: "index-error"
+
+[3]: value or error = get([1, 2, 3], 3);
+
+[4]: error
+"index-error"
+
+[5]: get({"key": "value"}, "key")
+"value"
+
+[6]: get({"key.0": "value"}, "key.0")
+"value"
+
+[7]: get({"key": ["value", "ao"]}, "key.1")
+"ao"
+
+[8]: get("hello, world", 5)
+","
+
+[9]: get("hello, world", "0..5")
+"hello"
+
+[10]: get("hello, world", {"selector", "range", "start": 0, "end": 5})
+"hello"
+
+[11]: get([1, 0, true, false, "", "hello"], true)
+[1, true, "hello"]
+
+[12]: get([1, 2, 3, 4], is_even)
+[2, 4]
+
+[13]: get("https://github.com", {"selector": "http.client"});
+{"type": "http.response", "headers": [["Content-Type", "text/html"], ...
+```
+
+## ifdefined, ifndefined
+
+```
+[1]: ifdefined("a");
+false
+
+[2]: ifndefined("a");
+true
+
+[2]: a = 1;
+
+[3]: ifdefined("a");
+true
+
+[4]: ifndefined("a");
+false
+```
+
+## delete
+
+```
+[1]: a = 1;
+
+[2]: delete("a");
+
+[3]: print a;
+Traceback: "undefined value"
 ```
