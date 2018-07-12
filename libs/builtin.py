@@ -89,3 +89,53 @@ def _eq(v1, v2):
     # support array and object, need type caster and recursion
     else:
         raise ValueError
+        
+from rpython.rtyper.lltypesystem import rffi, lltype
+from rpython.translator.tool.cbuild import ExternalCompilationInfo
+
+c_stdlib = ExternalCompilationInfo(includes=['stdlib.h'])
+
+c_stdlib_getenv = rffi.llexternal('getenv',
+        [rffi.CCHARP],
+        rffi.CCHARP,
+        compilation_info=c_stdlib)
+
+@as_f('__os_getenv__')
+def __os_getenv__(ctx):
+    ao_key = ctx.tos.pop()
+
+    if _type(ao_key) != '"string"':
+        ctx.tos.push('null')
+        return
+
+    try:
+        c_key = rffi.str2charp(ao_key[1:max(1, len(ao_key)-1)])
+        c_envvar = c_stdlib_getenv(c_key)
+    finally:
+        lltype.free(c_key, flavor='raw')
+
+    if not c_envvar:
+        ctx.tos.push('null')
+    else:
+        ctx.tos.push('"' + rffi.charp2str(c_envvar) + '"')
+
+c_stdlib_system = rffi.llexternal('system',
+        [rffi.CCHARP],
+        rffi.INT,
+        compilation_info=c_stdlib)
+
+@as_f('__os_system__')
+def __os_system__(ctx):
+    ao_key = ctx.tos.pop()
+
+    if _type(ao_key) != '"string"':
+        ctx.tos.push('null')
+        return
+
+    try:
+        c_key = rffi.str2charp(ao_key[1:max(1, len(ao_key)-1)])
+        c_ret = c_stdlib_system(c_key)
+    finally:
+        lltype.free(c_key, flavor='raw')
+
+    ctx.tos.push('%d' % c_ret)
