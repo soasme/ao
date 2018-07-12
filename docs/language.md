@@ -322,19 +322,16 @@ Traceback: "index-error"
 [8]: get("hello, world", 5)
 ","
 
-[9]: get("hello, world", "0..5")
+[9]: get("hello, world", range(0, 5))
 "hello"
 
-[10]: get("hello, world", {"selector", "range", "start": 0, "end": 5})
-"hello"
-
-[11]: get([1, 0, true, false, "", "hello"], true)
+[10]: get([1, 0, true, false, "", "hello"], true)
 [1, true, "hello"]
 
-[12]: get([1, 2, 3, 4], is_even)
+[11]: get([1, 2, 3, 4], is_even)
 [2, 4]
 
-[13]: get("https://github.com", {"selector": "http.client"});
+[12]: get("https://github.com", http.client({"timeout": 3}));
 {"type": "http.response", "headers": [["Content-Type", "text/html"], ...
 ```
 
