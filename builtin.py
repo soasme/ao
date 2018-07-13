@@ -27,3 +27,8 @@ def builtin_type(ctx):
     assert len(ctx.params) == 1
     val = ctx.params[0].space.newstr(ctx.params[0].type)
     ctx.tos.push(val)
+
+@as_f('raise')
+def builtin_raise(ctx):
+    assert len(ctx.params) == 1
+    ctx.machine.error = ctx.params[0]

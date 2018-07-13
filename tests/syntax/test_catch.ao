@@ -1,0 +1,20 @@
+badf = f() {
+    raise("customized error");
+};
+
+value or error = badf();
+assert(error == "customized error");
+
+badff = f() {
+    badf();
+};
+
+value or error = badff();
+assert(error == "customized error");
+
+object_as_error = f() {
+    raise({"code": 404});
+};
+
+value or error = object_as_error();
+assert(error == {"code": 404});

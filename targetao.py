@@ -22,7 +22,7 @@ BINARY_OR = 24;         BINARY_XOR = 25;        BINARY_EQ = 26;
 BINARY_NE = 27;         BINARY_GT = 28;         BINARY_GE = 29;
 BINARY_LT = 30;         BINARY_LE = 31;         BINARY_IN = 32;
 UNARY_NEGATIVE = 33;    UNARY_POSITIVE = 34;    UNARY_REVERSE = 35;
-LOGICAL_NOT = 36;
+LOGICAL_NOT = 36;       CATCH_ERROR = 37;
 
 CODES = """
     EXIT            PRINT             LOAD_LITERAL
@@ -37,7 +37,7 @@ CODES = """
     BINARY_NE       BINARY_GT         BINARY_GE
     BINARY_LT       BINARY_LE         BINARY_IN
     UNARY_NEGATIVE  UNARY_POSITIVE    UNARY_REVERSE
-    LOGICAL_NOT
+    LOGICAL_NOT     CATCH_ERROR
 """.split()
 
 BINARY_OP = {
@@ -117,6 +117,7 @@ object: "{" (entry [","])* entry* ["}"];
 array: "[" (expr [","])* expr* ["]"];
 entry: STRING [":"] expr;
 let: IDENTIFIER ["="] expr;
+catch: IDENTIFIER ["or"] IDENTIFIER ["="] expr;
 apply: IDENTIFIER ["("] (expr [","])* expr* [")"];
 f: ["f"] ["("] (IDENTIFIER [","])* IDENTIFIER* [")"] block;
 if: ["if"] ["("] expr [")"] block elif* else?;
@@ -126,7 +127,7 @@ while: ["while"] ["("] expr [")"] block;
 block: ["{"] stmt* ["}"];
 print: ["print"] expr;
 return: ["return"] expr;
-stmt: <print> [";"] | <return> [";"] | <let> [";"] | <if> | <while> | <apply> [";"];
+stmt: <print> [";"] | <return> [";"] | <catch> [";"] | <let> [";"] | <if> | <while> | <apply> [";"];
 """
 
 regexes, rules, _to_ast = parse_ebnf(EBNF)
@@ -333,6 +334,11 @@ class Compiler(RPythonVisitor):
 
     def visit_block(self, ast):
         for stmt in ast.children: self.dispatch(stmt)
+
+    def visit_catch(self, ast):
+        self.emit([CATCH_ERROR, self._get_identifier_index(ast.children[1])], ast)
+        self.dispatch(ast.children[2])
+        self.emit([SAVE_VARIABLE, self._get_identifier_index(ast.children[0])], ast)
 
 class Code(object):
 
@@ -703,7 +709,7 @@ def run_bin(left, op, right):
 
 class CodeContext(object):
 
-    def __init__(self, name, pc, bytecode, tos):
+    def __init__(self, name, pc, bytecode, tos, interpreter):
         self.name = name
         self.pc = pc
         self.bytecode = bytecode
@@ -713,6 +719,7 @@ class CodeContext(object):
         self.opname = CODES[self.opcode]
         self.tos = tos
         tos.save_pc(pc)
+        self.interpreter = interpreter
 
 def make_dispatch_function(**dispatch_table):
     def dispatch(self, ctx):
@@ -935,6 +942,11 @@ class Interpreter(BaseInterpreter):
         ctx.tos.push(val)
         ctx.pc += 1
 
+    def run_CATCH_ERROR(self, ctx):
+        sym = ctx.bytecode.get_symbol(ctx.opval)
+        ctx.tos.catch(sym)
+        ctx.pc += 1
+
 
 class Frame(object):
     def __init__(self, name, space, pc=0, parent=None, bytecode=None):
@@ -946,15 +958,15 @@ class Frame(object):
         self.pc = pc
         self.name = name
         self.bytecode = bytecode
+        self.error_var = None
 
     def save_pc(self, pc):
         self.pc = pc
 
     def save(self, key, value, frame=None):
         self.bindings[key] = value
-        #if value.startswith('@') and value not in self.codes:
-        # if isinstance(value, Function) and value.name not in self.codes:
-            # self.codes[value.] = Code(value.name, frame)
+        if self.error_var is not None:
+            self.error_var = None
 
     def load(self, key):
         if key in self.bindings:
@@ -965,6 +977,9 @@ class Frame(object):
             return Function(self.space, '@@' + key, None)
         else:
             raise Exception('unknown variable: %s' % key)
+
+    def catch(self, error):
+        self.error_var = error
 
     def get_code(self, key):
         if key in self.codes:
@@ -994,11 +1009,22 @@ class BuiltinContext(object):
         self.params = params
 
 def crash_stack(machine):
-    print 'Traceback: %s' % machine.error
-    for frame in machine.stack:
-        print get_location(frame.pc, frame.name, machine.program)
-    machine.exit_code = 1
-    machine.running = False
+    locations = []
+    while len(machine.stack) > 0:
+        tos = machine.stack[-1]
+        if machine.error is not None and tos.error_var is not None:
+            tos.push(machine.space.null)
+            tos.save(tos.error_var, machine.error)
+            machine.error = None
+            return tos
+        else:
+            locations.append(get_location(tos.pc, tos.name, machine.program))
+            machine.stack.pop()
+    print('Traceback: %s' % machine.space.toprintstr(machine.error))
+    for loc in locations:
+        print(loc)
+    if machine.exit_code == 0:
+        machine.exit_code = 1
 
 def mainloop(filename, source):
     pc = 0
@@ -1012,13 +1038,17 @@ def mainloop(filename, source):
         jitdriver.jit_merge_point(pc=pc, name=name, program=compiler, machine=interpreter)
         tos = interpreter.stack[-1]
         bytecode = interpreter.program.programs[name]
-        ctx = CodeContext(name, pc, bytecode, tos)
+        ctx = CodeContext(name, pc, bytecode, tos, interpreter)
         #print ctx.opcode, ctx.opval, ctx.tos.evaluations
         interpreter.dispatch(ctx)
         name, pc = ctx.name, ctx.pc
         if interpreter.error is not None:
-            crash_stack(interpreter)
-            break
+            tos = crash_stack(interpreter)
+            if tos is None:
+                break
+            else:
+                name = tos.name
+                pc = tos.pc + 1
     return interpreter.exit_code
 
 def run(filename):
