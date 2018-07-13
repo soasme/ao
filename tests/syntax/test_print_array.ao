@@ -1,0 +1,9 @@
+print [];
+print [1];
+print [1,2];
+print [[]];
+print [[[[[]]]]];
+print [[],[]];
+print [1,[]];
+print ["hello", "world"];
+print ["你好，世界"];

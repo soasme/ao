@@ -21,16 +21,3 @@ assert(bool(0) == false);
 assert(type(true) == "bool");
 
 assert(type(false) == "bool");
-
-# TODO:... please add more type tests.
-
-assert(add(1, 1) == 2);
-assert(add(1.0, 1.0) == 2.0);
-assert(add(1.0, 1) == 2.0);
-assert(add(1, 1.0) == 2.0);
-assert(add("1", "2") == "12");
-assert(add("1", 2) == "12");
-assert(1 + 1 == 2);
-assert(1.0 + 1.0 == 2.0);
-assert(1 + 1.0 == 2.0);
-assert(1.0 + 1 == 2.0);

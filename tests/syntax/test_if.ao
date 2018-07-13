@@ -1,0 +1,25 @@
+if (false) {
+    print "failed";
+} elif (true) {
+    print "passed";
+} else {
+    print "failed";
+}
+
+if (true) {
+    print "passed";
+} else {
+    print "failed";
+}
+
+if (false) {
+    print "failed";
+} else {
+    print "passed";
+}
+
+if (true) {
+    print "passed";
+}
+
+print "passed";

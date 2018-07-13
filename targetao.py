@@ -5,8 +5,10 @@ from rpython.rlib.parsing.ebnfparse import parse_ebnf, make_parse_function
 from rpython.rlib.parsing.parsing import ParseError
 from rpython.rlib.parsing.deterministic import LexerError
 from rpython.rlib.parsing.tree import RPythonVisitor
+from rpython.rlib.objectmodel import not_rpython
 from rpython.rlib.jit import JitDriver, purefunction
-from libs.builtin import MODULE
+from rpython.rlib.rbigint import rbigint
+from builtin import MODULE
 
 EXIT = 0;               PRINT = 1;              LOAD_LITERAL = 2;
 LOAD_FUNCTION = 3;      LOAD_VARIABLE = 4;      SAVE_VARIABLE = 5;
@@ -76,7 +78,10 @@ class Bytecode(object):
 
     def emit(self, instruction, ast):
         self.instructions.append(instruction)
-        self.positions[len(self.instructions) - 1] = ast.getsourcepos().lineno
+        try:
+            self.positions[len(self.instructions) - 1] = ast.getsourcepos().lineno
+        except IndexError:
+            self.positions[len(self.instructions) - 1] = -1
 
     def get_pc_position(self, pc):
         return self.positions[pc]
@@ -196,17 +201,17 @@ class Compiler(RPythonVisitor):
         ends.append(self._emit_future(ast))
         self._set_future(pred_fut, [JUMP_IF_FALSE_AND_POP, self._get_instructions_size()])
         for cond in ast.children[2:]:
-            self.dispatch(cond)
-            if cond.symbol == 'elif': ends.append(self._emit_future(ast))
+            if cond.symbol == 'elif':
+                self.dispatch(ast.children[0])
+                pred_fut = self._emit_future(ast)
+                self.dispatch(ast.children[1])
+                self._set_future(pred_fut,
+                        [JUMP_IF_FALSE_AND_POP, self._get_instructions_size()])
+                ends.append(self._emit_future(ast))
+            else:
+                self.dispatch(cond.children[0])
         for end in ends:
             self._set_future(end, [JUMP, self._get_instructions_size()])
-
-    def visit_elif(self, ast):
-        self.dispatch(ast.children[0])
-        pred_fut = self._emit_future(ast)
-        self.dispatch(ast.children[1])
-
-    def visit_else(self, ast): self.dispatch(ast.children[0])
 
     def visit_while(self, ast):
         start = self._get_instructions_size()
@@ -296,7 +301,7 @@ class Compiler(RPythonVisitor):
         self.programs[f_target] = program
         self.target = f_target
         self.dispatch(ast.children[len(params)])
-        if program.instructions[-1][0] != RETURN_VALUE:
+        if len(program.instructions) == 0 or program.instructions[-1][0] != RETURN_VALUE:
             self.emit([RETURN_VALUE], ast)
         self.target = target
         index = self.programs[target].symbols.index(f_target)
@@ -335,9 +340,606 @@ class Code(object):
         self.name = name
         self.frame = environment_frame
 
+class Value(object):
+
+    def __init__(self, space):
+        self.space = space
+
+class Number(Value):
+
+    def __init__(self, space, value):
+        self.space = space
+        self.numbervalue = value
+
+class Int(Number):
+
+    type = 'int'
+
+    def __init__(self, space, value):
+        self.space = space
+        self.intvalue = value
+
+class BigInt(Number):
+
+    type = 'bigint'
+
+    def __init__(self, space, value):
+        self.space = space
+        self.bigintvalue = value
+
+class Float(Number):
+
+    type = 'float'
+
+    def __init__(self, space, value):
+        self.space = space
+        self.floatvalue = value
+
+class Str(Value):
+
+    type = 'str'
+
+    def __init__(self, space, value):
+        self.space = space
+        self.strvalue = value
+
+class Bool(Value):
+
+    type = 'bool'
+
+    def __init__(self, space, value):
+        self.space = space
+        self.boolvalue = value
+
+class Null(Value):
+
+    type = 'null'
+
+class Array(Value):
+
+    type = 'array'
+
+    def __init__(self, space, value):
+        self.space = space
+        self.arrayvalue = list(value)
+
+class Object(Value):
+
+    type = 'object'
+
+    def __init__(self, space, value):
+        self.space = space
+        self.objectvalue = {}
+        for k in value:
+            string_key = space.caststr(k)
+            self.objectvalue[string_key] = value[k]
+
+class Function(Value):
+
+    type = 'function'
+
+    def __init__(self, space, id, frame):
+        self.id = id
+        self.space = space
+        self.frame = frame
+
+class BuiltinFunction(Function):
+
+    type = 'builtinfunction'
+
+    def __init__(self, space, id):
+        self.id = id
+        self.space = space
+
+class Space(object):
+
+    def __init__(self):
+        self.true = Bool(self, True)
+        self.false = Bool(self, False)
+        self.null = Null(self)
+
+    def newliteral(self, s):
+        if s == 'null':
+            return self.null
+        elif s == 'true':
+            return self.true
+        elif s == 'false':
+            return self.false
+        elif s.startswith('"'):
+            return self.newstr(s[1:max(1, len(s)-1)])
+        elif '.' in s or 'e' in s:
+            return self.newfloat(s)
+        elif len(s) > 19:
+            return self.newbigint(s)
+        else:
+            return self.newint(s)
+
+    def torepl(self, o): # return an rpython string
+        if isinstance(o, Null):
+            return 'null'
+        elif isinstance(o, Bool):
+            if o.boolvalue == True:
+                return 'true'
+            else:
+                return 'false'
+        elif isinstance(o, Str):
+            return '"%s"' % o.strvalue
+        elif isinstance(o, Int):
+            return str(o.intvalue)
+        elif isinstance(o, BigInt):
+            return o.bigintvalue.str()
+        elif isinstance(o, Float):
+            return str(o.floatvalue)
+        elif isinstance(o, Array):
+            return '[%s]' % ','.join([
+                self.torepl(e) for e in o.arrayvalue
+            ])
+        elif isinstance(o, Object):
+            return '{%s}' % ','.join([
+                '"%s":%s' % (k, self.torepl(v))
+                for k, v in o.objectvalue.items()
+            ])
+        elif isinstance(o, Function):
+            return '{"type":"function","id":"%s"}' % o.id
+        else:
+            raise ValueError('unknown value %s' % o)
+
+    def toprintstr(self, o):
+        if isinstance(o, Str):
+            return o.strvalue
+        else:
+            return self.torepl(o)
+
+    def caststr(self, o): # return rpython string
+        if isinstance(o, Str):
+            return o.strvalue
+        else:
+            return self.torepl(o)
+
+    def castbool(self, o):
+        if isinstance(o, Bool) and not o.boolvalue:
+            return False
+        elif isinstance(o, Null):
+            return False
+        elif isinstance(o, Int) and o.intvalue == 0:
+            return False
+        elif isinstance(o, Float) and o.floatvalue == 0.0:
+            return False
+        elif isinstance(o, BigInt) and o.bigintvalue.str() == '0':
+            return False
+        elif isinstance(o, Str) and o.strvalue == '':
+            return False
+        elif isinstance(o, Array) and len(o.arrayvalue) == 0:
+            return False
+        elif isinstance(o, Object) and len(o.objectvalue) == 0:
+            return False
+        return True
+
+    def newint(self, i):
+        return Int(self, int(i))
+
+    def newfloat(self, f):
+        return Float(self, float(f))
+
+    def newbigint(self, b):
+        return BigInt(self, rbigint.fromstr(b))
+
+    def newstr(self, s):
+        return Str(self, str(s))
+
+    def newarray(self, a):
+        return Array(self, a)
+
+    def newobject(self, o):
+        return Object(self, o)
+
+    def newfunction(self, id, frame):
+        return Function(self, id, frame)
+
+
+def run_bin(left, op, right):
+    if op == BINARY_ADD:
+        if isinstance(left, Int) and isinstance(right, Int):
+            return Int(left.space, left.intvalue + right.intvalue)
+        if isinstance(left, Float) and isinstance(right, Int):
+            return Float(left.space, left.floatvalue + right.intvalue)
+        if isinstance(left, Float) and isinstance(right, Float):
+            return Float(left.space, left.floatvalue + right.floatvalue)
+        if isinstance(left, Int) and isinstance(right, Float):
+            return Float(left.space, left.intvalue + right.floatvalue)
+        else:
+            raise ValueError('invalid add operation')
+    elif op == BINARY_SUB:
+        if isinstance(left, Int) and isinstance(right, Int):
+            return Int(left.space, left.intvalue - right.intvalue)
+        if isinstance(left, Float) and isinstance(right, Int):
+            return Float(left.space, left.floatvalue - right.intvalue)
+        if isinstance(left, Float) and isinstance(right, Float):
+            return Float(left.space, left.floatvalue - right.floatvalue)
+        if isinstance(left, Int) and isinstance(right, Float):
+            return Float(left.space, left.intvalue - right.floatvalue)
+        else:
+            raise ValueError('invalid add operation')
+    if op == BINARY_MUL:
+        if isinstance(left, Int) and isinstance(right, Int):
+            return Int(left.space, left.intvalue * right.intvalue)
+        if isinstance(left, Float) and isinstance(right, Int):
+            return Float(left.space, left.floatvalue * right.intvalue)
+        if isinstance(left, Float) and isinstance(right, Float):
+            return Float(left.space, left.floatvalue * right.floatvalue)
+        if isinstance(left, Int) and isinstance(right, Float):
+            return Float(left.space, left.intvalue * right.floatvalue)
+        else:
+            raise ValueError('invalid add operation')
+    elif op == BINARY_DIV:
+        if isinstance(left, Int) and isinstance(right, Int):
+            return Int(left.space, left.intvalue / right.intvalue)
+        if isinstance(left, Float) and isinstance(right, Int):
+            return Float(left.space, left.floatvalue / right.intvalue)
+        if isinstance(left, Float) and isinstance(right, Float):
+            return Float(left.space, left.floatvalue / right.floatvalue)
+        if isinstance(left, Int) and isinstance(right, Float):
+            return Float(left.space, left.intvalue / right.floatvalue)
+        else:
+            raise ValueError('invalid add operation')
+    elif op == BINARY_MOD:
+        if isinstance(left, Int) and isinstance(right, Int):
+            return Int(left.space, left.intvalue % right.intvalue)
+        if isinstance(left, Float) and isinstance(right, Int):
+            return Float(left.space, left.floatvalue % right.intvalue)
+        if isinstance(left, Float) and isinstance(right, Float):
+            return Float(left.space, left.floatvalue % right.floatvalue)
+        if isinstance(left, Int) and isinstance(right, Float):
+            return Float(left.space, left.intvalue % right.floatvalue)
+        else:
+            raise ValueError('invalid add operation')
+    elif op == BINARY_LSHIFT:
+        if isinstance(left, Int) and isinstance(right, Int):
+            return Int(left.space, left.intvalue << right.intvalue)
+        else:
+            raise ValueError('invalid add operation')
+    elif op == BINARY_RSHIFT:
+        if isinstance(left, Int) and isinstance(right, Int):
+            return Int(left.space, left.intvalue >> right.intvalue)
+        else:
+            raise ValueError('invalid add operation')
+    elif op == BINARY_EQ:
+        if isinstance(left, Int) and isinstance(right, Int):
+            if left.intvalue == right.intvalue:
+                return left.space.true
+            else:
+                return left.space.false
+        elif isinstance(left, Float) and isinstance(right, Float):
+            if left.floatvalue == right.floatvalue:
+                return left.space.true
+            else:
+                return left.space.false
+        elif isinstance(left, Str) and isinstance(right, Str):
+            if left.strvalue == right.strvalue:
+                return left.space.true
+            else:
+                return left.space.false
+        elif isinstance(left, Bool) and isinstance(right, Bool):
+            if left.boolvalue == right.boolvalue:
+                return left.space.true
+            else:
+                return left.space.false
+        elif isinstance(left, Null) and isinstance(right, Null):
+            return left.space.true
+        elif isinstance(left, Array) and isinstance(right, Array):
+            if len(left.arrayvalue) == 0 and len(right.arrayvalue) == 0:
+                return left.space.true
+            if len(left.arrayvalue) != len(right.arrayvalue):
+                return left.space.false
+            for le, re in zip(left.arrayvalue, right.arrayvalue):
+                if not run_bin(le, BINARY_EQ, re).boolvalue:
+                    return left.space.false
+            return left.space.true
+        elif isinstance(left, Object) and isinstance(right, Object):
+            if len(left.objectvalue) == 0 and len(right.objectvalue) == 0:
+                return left.space.true
+            if len(left.objectvalue) != len(right.objectvalue):
+                return left.space.false
+            for k in left.objectvalue:
+                if k not in right.objectvalue:
+                    return left.space.false
+                if not run_bin(left.objectvalue[k],
+                        BINARY_EQ, right.objectvalue[k]).boolvalue:
+                    return left.space.false
+            return left.space.true
+        else:
+            return left.space.false
+    elif op == BINARY_NE:
+        if run_bin(left, BINARY_EQ, right).boolvalue:
+            return left.space.false
+        else:
+            return left.space.true
+    elif op == BINARY_GT:
+        if isinstance(left, Int) and isinstance(right, Int):
+            return Int(left.space, left.intvalue > right.intvalue)
+        if isinstance(left, Float) and isinstance(right, Int):
+            return Float(left.space, left.floatvalue > right.intvalue)
+        if isinstance(left, Float) and isinstance(right, Float):
+            return Float(left.space, left.floatvalue > right.floatvalue)
+        if isinstance(left, Int) and isinstance(right, Float):
+            return Float(left.space, left.intvalue > right.floatvalue)
+        else:
+            raise ValueError('invalid ge operation')
+    elif op == BINARY_GE:
+        if isinstance(left, Int) and isinstance(right, Int):
+            return Int(left.space, left.intvalue >= right.intvalue)
+        if isinstance(left, Float) and isinstance(right, Int):
+            return Float(left.space, left.floatvalue >= right.intvalue)
+        if isinstance(left, Float) and isinstance(right, Float):
+            return Float(left.space, left.floatvalue >= right.floatvalue)
+        if isinstance(left, Int) and isinstance(right, Float):
+            return Float(left.space, left.intvalue >= right.floatvalue)
+        else:
+            raise ValueError('invalid ge operation')
+    elif op == BINARY_LT:
+        if isinstance(left, Int) and isinstance(right, Int):
+            return Int(left.space, left.intvalue < right.intvalue)
+        if isinstance(left, Float) and isinstance(right, Int):
+            return Float(left.space, left.floatvalue < right.intvalue)
+        if isinstance(left, Float) and isinstance(right, Float):
+            return Float(left.space, left.floatvalue < right.floatvalue)
+        if isinstance(left, Int) and isinstance(right, Float):
+            return Float(left.space, left.intvalue < right.floatvalue)
+        else:
+            raise ValueError('invalid ge operation')
+    elif op == BINARY_LE:
+        if isinstance(left, Int) and isinstance(right, Int):
+            return Int(left.space, left.intvalue <= right.intvalue)
+        if isinstance(left, Float) and isinstance(right, Int):
+            return Float(left.space, left.floatvalue <= right.intvalue)
+        if isinstance(left, Float) and isinstance(right, Float):
+            return Float(left.space, left.floatvalue <= right.floatvalue)
+        if isinstance(left, Int) and isinstance(right, Float):
+            return Float(left.space, left.intvalue <= right.floatvalue)
+        else:
+            raise ValueError('invalid ge operation')
+    else:
+        raise ValueError('invalid add operation')
+
+class CodeContext(object):
+
+    def __init__(self, name, pc, bytecode, tos):
+        self.name = name
+        self.pc = pc
+        self.bytecode = bytecode
+        self.op = bytecode.instructions[pc]
+        self.opcode = self.op[0]
+        self.opval = 0 if len(self.op) == 1 else self.op[1]
+        self.opname = CODES[self.opcode]
+        self.tos = tos
+        tos.save_pc(pc)
+
+def make_dispatch_function(**dispatch_table):
+    def dispatch(self, ctx):
+        func = dispatch_table[ctx.opname]
+        return func(self, ctx)
+    return dispatch
+
+class CreateOpcodeDictionaryMetaclass(type):
+
+    def __new__(cls, name_, bases, dct):
+        dispatch_table = {}
+        for name, value in dct.iteritems():
+            if name.startswith("run_"):
+                dispatch_table[name[len("run_"):]] = value
+        dct["dispatch"] = make_dispatch_function(**dispatch_table)
+        return type.__new__(cls, name_, bases, dct)
+
+class BaseInterpreter(object):
+    __metaclass__ = CreateOpcodeDictionaryMetaclass
+
+class Interpreter(BaseInterpreter):
+
+    def __init__(self, entry, program):
+        self.running = True
+        self.exit_code = 0
+        self.program = program
+        self.error = None
+        self.space = Space()
+        self.stack = [Frame(entry, space=self.space, bytecode=program.programs[entry])]
+
+    def run_PRINT(self, ctx):
+        val = ctx.tos.pop()
+        print(self.space.toprintstr(val))
+        ctx.pc += 1
+
+    def run_LOAD_LITERAL(self, ctx):
+        lit = ctx.bytecode.get_literal(ctx.opval)
+        val = self.space.newliteral(lit)
+        ctx.tos.push(val)
+        ctx.pc += 1
+
+    def run_SAVE_VARIABLE(self, ctx):
+        sym = ctx.bytecode.get_symbol(ctx.opval)
+        ctx.tos.save(sym, ctx.tos.pop(), ctx.tos)
+        ctx.pc += 1
+
+    def run_LOAD_VARIABLE(self, ctx):
+        sym = ctx.bytecode.get_symbol(ctx.opval)
+        ctx.tos.push(ctx.tos.load(sym))
+        ctx.pc += 1
+
+    def run_MAKE_ARRAY(self, ctx):
+        length = ctx.opval
+        args = [ctx.tos.pop() for _ in range(length)]
+        val = self.space.newarray(args)
+        ctx.tos.push(val)
+        ctx.pc += 1
+
+    def run_MAKE_OBJECT(self, ctx):
+        length = ctx.opval
+        obj = {}
+        for _ in range(ctx.opval):
+            key = ctx.tos.pop()
+            value = ctx.tos.pop()
+            assert isinstance(value, Value)
+            obj[key] = value
+        val = self.space.newobject(obj)
+        ctx.tos.push(val)
+        ctx.pc += 1
+
+    def run_LOAD_FUNCTION(self, ctx):
+        sym = ctx.bytecode.get_symbol(ctx.opval)
+        val = self.space.newfunction(sym, ctx.tos)
+        ctx.tos.push(val)
+        ctx.pc += 1
+
+    def run_CALL_FUNCTION(self, ctx):
+        func_val = ctx.tos.pop()
+        if func_val.id.startswith('@@'):
+            params = []
+            for i in range(ctx.opval):
+                params.append(ctx.tos.pop())
+            builtin = MODULE[func_val.id[2:]]
+            builtin(BuiltinContext(self, ctx.tos, ctx.bytecode, params))
+            ctx.pc += 1
+        else:
+            func_bytecode = self.program.programs[func_val.id]
+            parent_frame = func_val.frame
+            new_frame = Frame(name=func_val.id, pc=0,
+                    space=self.space,
+                    parent=parent_frame, bytecode=func_bytecode)
+            for i in range(ctx.opval):
+                argv_i_sym = func_bytecode.get_symbol(ctx.opval - i - 1)
+                new_frame.save(argv_i_sym, ctx.tos.pop(), new_frame)
+            self.stack.append(new_frame)
+            ctx.name = func_val.id
+            ctx.pc = 0
+
+    def run_RETURN_VALUE(self, ctx):
+        ret_val = ctx.tos.pop() if ctx.tos.evaluations else self.space.null
+        self.stack.pop()
+        prev_tos = self.stack[-1]
+        prev_tos.push(ret_val)
+        ctx.name = prev_tos.name
+        ctx.pc = prev_tos.pc + 1
+
+    def run_JUMP(self, ctx):
+        ctx.pc = ctx.opval
+
+    def run_JUMP_IF_TRUE_AND_POP(self, ctx):
+        val = ctx.tos.pop()
+        ctx.pc = ctx.opval if self.space.castbool(val) else ctx.pc + 1
+
+    def run_JUMP_IF_FALSE_AND_POP(self, ctx):
+        val = ctx.tos.pop()
+        ctx.pc = ctx.opval if not self.space.castbool(val) else ctx.pc + 1
+
+    def run_JUMP_IF_TRUE_OR_POP(self, ctx):
+        val = ctx.tos.peek()
+        if self.space.castbool(val):
+            ctx.pc = ctx.opval
+        else:
+            ctx.tos.pop()
+            ctx.pc += 1
+
+    def run_JUMP_IF_FALSE_OR_POP(self, ctx):
+        val = ctx.tos.peek()
+        if self.space.castbool(val):
+            ctx.tos.pop()
+            ctx.pc += 1
+        else:
+            ctx.pc = ctx.opval
+
+    def run_EXIT(self, ctx):
+        self.exit_code = ctx.opval
+        self.running = False
+
+    def run_BINARY_ADD(self, ctx):
+        right, left = ctx.tos.pop(), ctx.tos.pop()
+        val = run_bin(left, BINARY_ADD, right)
+        ctx.tos.push(val)
+        ctx.pc += 1
+
+    def run_BINARY_SUB(self, ctx):
+        right, left = ctx.tos.pop(), ctx.tos.pop()
+        val = run_bin(left, BINARY_SUB, right)
+        ctx.tos.push(val)
+        ctx.pc += 1
+
+    def run_BINARY_MUL(self, ctx):
+        right, left = ctx.tos.pop(), ctx.tos.pop()
+        val = run_bin(left, BINARY_MUL, right)
+        ctx.tos.push(val)
+        ctx.pc += 1
+
+    def run_BINARY_DIV(self, ctx):
+        right, left = ctx.tos.pop(), ctx.tos.pop()
+        val = run_bin(left, BINARY_DIV, right)
+        ctx.tos.push(val)
+        ctx.pc += 1
+
+    def run_BINARY_MOD(self, ctx):
+        right, left = ctx.tos.pop(), ctx.tos.pop()
+        val = run_bin(left, BINARY_MOD, right)
+        ctx.tos.push(val)
+        ctx.pc += 1
+
+    def run_BINARY_LSHIFT(self, ctx):
+        right, left = ctx.tos.pop(), ctx.tos.pop()
+        val = run_bin(left, BINARY_LSHIFT, right)
+        ctx.tos.push(val)
+        ctx.pc += 1
+
+    def run_BINARY_RSHIFT(self, ctx):
+        right, left = ctx.tos.pop(), ctx.tos.pop()
+        val = run_bin(left, BINARY_RSHIFT, right)
+        ctx.tos.push(val)
+        ctx.pc += 1
+
+    def run_BINARY_EQ(self, ctx):
+        right, left = ctx.tos.pop(), ctx.tos.pop()
+        val = run_bin(left, BINARY_EQ, right)
+        ctx.tos.push(val)
+        ctx.pc += 1
+
+    def run_BINARY_NE(self, ctx):
+        right, left = ctx.tos.pop(), ctx.tos.pop()
+        val = run_bin(left, BINARY_NE, right)
+        ctx.tos.push(val)
+        ctx.pc += 1
+
+    def run_BINARY_GE(self, ctx):
+        right, left = ctx.tos.pop(), ctx.tos.pop()
+        val = run_bin(left, BINARY_GE, right)
+        ctx.tos.push(val)
+        ctx.pc += 1
+
+    def run_BINARY_LE(self, ctx):
+        right, left = ctx.tos.pop(), ctx.tos.pop()
+        val = run_bin(left, BINARY_LE, right)
+        ctx.tos.push(val)
+        ctx.pc += 1
+
+    def run_BINARY_GT(self, ctx):
+        right, left = ctx.tos.pop(), ctx.tos.pop()
+        val = run_bin(left, BINARY_GT, right)
+        ctx.tos.push(val)
+        ctx.pc += 1
+
+    def run_BINARY_LT(self, ctx):
+        right, left = ctx.tos.pop(), ctx.tos.pop()
+        val = run_bin(left, BINARY_LT, right)
+        ctx.tos.push(val)
+        ctx.pc += 1
+
+    def run_LOGICAL_NOT(self, ctx):
+        val = ctx.tos.pop()
+        val = self.space.castbool(val)
+        val = self.space.false if val else self.space.true
+        ctx.tos.push(val)
+        ctx.pc += 1
+
+
 class Frame(object):
-    def __init__(self, name, pc=0, parent=None, bytecode=None):
+    def __init__(self, name, space, pc=0, parent=None, bytecode=None):
         self.bindings = {}
+        self.space = space
         self.evaluations = []
         self.codes = {}
         self.parent = parent
@@ -350,8 +952,9 @@ class Frame(object):
 
     def save(self, key, value, frame=None):
         self.bindings[key] = value
-        if value.startswith('@') and value not in self.codes:
-            self.codes[value] = Code(value, frame)
+        #if value.startswith('@') and value not in self.codes:
+        # if isinstance(value, Function) and value.name not in self.codes:
+            # self.codes[value.] = Code(value.name, frame)
 
     def load(self, key):
         if key in self.bindings:
@@ -359,7 +962,7 @@ class Frame(object):
         elif self.parent is not None:
             return self.parent.load(key)
         elif key in MODULE:
-            return '@@' + key
+            return Function(self.space, '@@' + key, None)
         else:
             raise Exception('unknown variable: %s' % key)
 
@@ -384,188 +987,11 @@ class Frame(object):
         return '%s' % self.name
 
 class BuiltinContext(object):
-    def __init__(self, machine, tos, bytecode):
+    def __init__(self, machine, tos, bytecode, params):
         self.machine = machine
         self.tos = tos
         self.bytecode = bytecode
-
-class Machine(object):
-
-    def __init__(self, entry, program):
-        self.running = True
-        self.exit_code = 0
-        self.program = program
-        self.error = None
-        self.stack = [Frame(entry, bytecode=program.programs[entry])]
-
-    def run_code(self, prog_name, pc):
-        tos = self.stack[-1]
-        tos.save_pc(pc)
-        bytecode = self.program.programs[prog_name]
-        inst = bytecode.get_instruction(pc)
-        opcode = inst[0]
-        #print prog_name, pc, inst, tos.evaluations
-        #print get_location(pc, prog_name, self.program), tos.evaluations
-        if opcode == CALL_FUNCTION:
-            func_sym = tos.pop()
-            if func_sym.startswith('@@'):
-                builtin = MODULE[func_sym[2:]]
-                builtin(BuiltinContext(self, tos, bytecode))
-            else:
-                func_code = tos.get_code(func_sym)
-                parent_frame = func_code.frame
-                func_bytecode = self.program.programs[func_sym]
-                new_frame = Frame(name=func_sym, pc=0, parent=parent_frame, bytecode=func_bytecode)
-                argc = inst[1]
-                for i in range(argc):
-                    argv_i_sym = func_bytecode.get_symbol(i)
-                    new_frame.save(argv_i_sym, tos.pop(), new_frame)
-                self.stack.append(new_frame)
-                return func_sym, 0
-        elif opcode == RETURN_VALUE:
-            val = tos.pop()
-            old_frame = self.stack.pop()
-            tos = self.stack[-1]
-            pc = tos.pc
-            prog_name = tos.name
-            tos.push(val)
-            if val.startswith('@'):
-                tos.codes[val] = Code(val, old_frame)
-        elif opcode == PRINT:
-            print(tos.pop())
-        elif opcode == LOAD_LITERAL:
-            tos.push(bytecode.get_literal(inst[1]))
-        elif opcode == LOAD_VARIABLE:
-            sym = bytecode.get_symbol(inst[1])
-            tos.push(tos.load(sym))
-        elif opcode == LOAD_FUNCTION:
-            sym = bytecode.get_symbol(inst[1])
-            tos.push(sym)
-        elif opcode == SAVE_VARIABLE:
-            sym = bytecode.get_symbol(inst[1])
-            tos.save(sym, tos.pop(), tos)
-        elif opcode == MAKE_ARRAY:
-            argc, args, x = inst[1], [tos.pop() for _ in range(inst[1])], '['
-            for i in range(argc):
-                x += args[argc - i - 1]
-                if i < argc - 1:
-                    x += ','
-            x += ']'
-            tos.push(x)
-        elif opcode == MAKE_OBJECT:
-            i, argc = 0, inst[1]
-            # [..., [value, key]]
-            args = [[tos.pop(), tos.pop()] for _ in range(argc)]
-            x = '{'
-            while i < argc:
-                x += args[argc - i - 1][1]
-                x += ':'
-                x += args[argc - i - 1][0]
-                if i < argc - 1:
-                    x += ','
-                i = i + 1
-            x += '}'
-            tos.push(x)
-        elif opcode == BINARY_ADD:
-            MODULE['add'](BuiltinContext(self, tos, bytecode))
-        elif opcode == BINARY_SUB:
-            right, left = tos.pop(), tos.pop()
-            tos.push(str(int(left) - int(right)))
-        elif opcode == BINARY_MUL:
-            right, left = tos.pop(), tos.pop()
-            tos.push(str(int(left) * int(right)))
-        elif opcode == BINARY_DIV:
-            right, left = tos.pop(), tos.pop()
-            tos.push(str(int(left) / int(right)))
-        elif opcode == BINARY_MOD:
-            right, left = tos.pop(), tos.pop()
-            tos.push(str(int(left) % int(right)))
-        elif opcode == BINARY_LSHIFT:
-            right, left = tos.pop(), tos.pop()
-            tos.push(str(int(left) << int(right)))
-        elif opcode == BINARY_RSHIFT:
-            right, left = tos.pop(), tos.pop()
-            tos.push(str(int(left) >> int(right)))
-        elif opcode == BINARY_AND:
-            right, left = tos.pop(), tos.pop()
-            tos.push(str(int(left) & int(right)))
-        elif opcode == BINARY_OR:
-            right, left = tos.pop(), tos.pop()
-            tos.push(str(int(left) | int(right)))
-        elif opcode == BINARY_XOR:
-            right, left = tos.pop(), tos.pop()
-            tos.push(str(int(left) ^ int(right)))
-        elif opcode == BINARY_EQ: # FIXME: support for all types.
-            MODULE['eq'](BuiltinContext(self, tos, bytecode))
-        elif opcode == BINARY_NE:
-            right, left = tos.pop(), tos.pop()
-            tos.push('true' if left != right else 'false')
-        elif opcode == BINARY_GT:
-            right, left = tos.pop(), tos.pop()
-            tos.push('true' if left > right else 'false')
-        elif opcode == BINARY_GE:
-            right, left = tos.pop(), tos.pop()
-            tos.push('true' if left >= right else 'false')
-        elif opcode == BINARY_LT:
-            right, left = tos.pop(), tos.pop()
-            tos.push('true' if left < right else 'false')
-        elif opcode == BINARY_LE:
-            right, left = tos.pop(), tos.pop()
-            tos.push('true' if left <= right else 'false')
-        elif opcode == BINARY_IN: # FIXME: won't work.
-            right, left = tos.pop(), tos.pop()
-            tos.push('true' if left in right else 'false')
-        elif opcode == BINARY_NE:
-            pass
-        elif opcode == UNARY_NEGATIVE:
-            value = tos.pop()
-            tos.push(str(-1 * int(value)))
-        elif opcode == UNARY_REVERSE:
-            value = tos.pop()
-            tos.push(str(~int(value)))
-        elif opcode == LOGICAL_NOT:
-            value = tos.pop()
-            tos.push('true' if value == 'false' or value == '[]' or value == '{}'
-                    or value == '""' or value == '0' or value == '0.0'else 'false')
-        elif opcode == JUMP:
-            pc = inst[1]
-            return prog_name, pc
-        elif opcode == JUMP_IF_TRUE_AND_POP:
-            val = tos.pop()
-            if val == 'true':
-                pc = inst[1]
-            else:
-                pc = pc + 1
-            return prog_name, pc
-        elif opcode == JUMP_IF_FALSE_AND_POP:
-            val = tos.pop()
-            if val == 'false':
-                pc = inst[1]
-            else:
-                pc = pc + 1
-            return prog_name, pc
-        elif opcode == JUMP_IF_TRUE_OR_POP:
-            val = tos.peek()
-            if val == 'true':
-                pc = inst[1]
-            else:
-                tos.pop()
-                pc = pc + 1
-            return prog_name, pc
-        elif opcode == JUMP_IF_FALSE_OR_POP:
-            val = tos.peek()
-            if val == 'false':
-                pc = inst[1]
-            else:
-                tos.pop()
-                pc = pc + 1
-            return prog_name, pc
-        elif opcode == EXIT:
-            self.exit_code = int(tos.pop())
-            self.running = False
-        else:
-            raise Exception("Unknown Bytecode")
-        return prog_name, pc + 1
+        self.params = params
 
 def crash_stack(machine):
     print 'Traceback: %s' % machine.error
@@ -581,14 +1007,19 @@ def mainloop(filename, source):
     compiler.compile(name, source)
     if name not in compiler.programs:
         return 1
-    machine = Machine(name, compiler)
-    while pc < len(compiler.programs[name].instructions) and machine.running:
-        jitdriver.jit_merge_point(pc=pc, name=name, program=compiler, machine=machine)
-        name, pc = machine.run_code(name, pc)
-        if machine.error is not None:
-            crash_stack(machine)
+    interpreter = Interpreter(name, compiler)
+    while pc < len(compiler.programs[name].instructions) and interpreter.running:
+        jitdriver.jit_merge_point(pc=pc, name=name, program=compiler, machine=interpreter)
+        tos = interpreter.stack[-1]
+        bytecode = interpreter.program.programs[name]
+        ctx = CodeContext(name, pc, bytecode, tos)
+        #print ctx.opcode, ctx.opval, ctx.tos.evaluations
+        interpreter.dispatch(ctx)
+        name, pc = ctx.name, ctx.pc
+        if interpreter.error is not None:
+            crash_stack(interpreter)
             break
-    return machine.exit_code
+    return interpreter.exit_code
 
 def run(filename):
     program_contents = ""
