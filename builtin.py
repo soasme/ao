@@ -20,7 +20,7 @@ def builtin_assert(ctx):
     assert len(ctx.params) == 1
     pyval = ctx.params[0].space.castbool(ctx.params[0])
     if not pyval:
-        ctx.machine.error = 'assertion error'
+        ctx.machine.error = ctx.machine.space.newstr('assertion error')
 
 @as_f('type')
 def builtin_type(ctx):

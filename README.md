@@ -9,6 +9,8 @@ It supports:
 * Function: `double = f (a) { return a * a; };`.
 * Arithmetic: `+`, `-`, `*`, `/`, `%`, `<<`, `>>`, `&`, `|`, `~`.
 * Comparison: `==`, `!=`, `>`, `>=`, `<`, `<=`.
+* Logical: `and`, `or`, `not`.
+* Error handling: `value or error = a_function_might_raise_error();`
 
 ## Getting Started
 
@@ -78,6 +80,18 @@ g = f (m) {
 
 plus42 = f(42);
 print plus42(42);
+```
+
+Catch errors.
+
+```
+badfunction = f () {
+    raise("It can be any type, str, int, object, etc.");
+    # It never returns 1 here.
+    return 1;
+};
+
+value or error = badfunction();
 ```
 
 ## Develop

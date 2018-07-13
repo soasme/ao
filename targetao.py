@@ -591,12 +591,12 @@ def run_bin(left, op, right):
     elif op == BINARY_MOD:
         if isinstance(left, Int) and isinstance(right, Int):
             return Int(left.space, left.intvalue % right.intvalue)
-        if isinstance(left, Float) and isinstance(right, Int):
-            return Float(left.space, left.floatvalue % right.intvalue)
-        if isinstance(left, Float) and isinstance(right, Float):
-            return Float(left.space, left.floatvalue % right.floatvalue)
-        if isinstance(left, Int) and isinstance(right, Float):
-            return Float(left.space, left.intvalue % right.floatvalue)
+        # if isinstance(left, Float) and isinstance(right, Int):
+            # return Float(left.space, left.floatvalue % right.intvalue)
+        # if isinstance(left, Float) and isinstance(right, Float):
+            # return Float(left.space, left.floatvalue % right.floatvalue)
+        # if isinstance(left, Int) and isinstance(right, Float):
+            # return Float(left.space, left.intvalue % right.floatvalue)
         else:
             raise ValueError('invalid add operation')
     elif op == BINARY_LSHIFT:
@@ -637,7 +637,9 @@ def run_bin(left, op, right):
                 return left.space.true
             if len(left.arrayvalue) != len(right.arrayvalue):
                 return left.space.false
-            for le, re in zip(left.arrayvalue, right.arrayvalue):
+            for index in range(len(left.arrayvalue)):
+                le = left.arrayvalue[index]
+                re = right.arrayvalue[index]
                 if not run_bin(le, BINARY_EQ, re).boolvalue:
                     return left.space.false
             return left.space.true
