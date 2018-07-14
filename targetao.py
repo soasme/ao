@@ -203,12 +203,12 @@ class Compiler(RPythonVisitor):
         self._set_future(pred_fut, [JUMP_IF_FALSE_AND_POP, self._get_instructions_size()])
         for cond in ast.children[2:]:
             if cond.symbol == 'elif':
-                self.dispatch(ast.children[0])
+                self.dispatch(cond.children[0])
                 pred_fut = self._emit_future(ast)
-                self.dispatch(ast.children[1])
+                self.dispatch(cond.children[1])
+                ends.append(self._emit_future(ast))
                 self._set_future(pred_fut,
                         [JUMP_IF_FALSE_AND_POP, self._get_instructions_size()])
-                ends.append(self._emit_future(ast))
             else:
                 self.dispatch(cond.children[0])
         for end in ends:
@@ -365,6 +365,9 @@ class Int(Number):
         self.space = space
         self.intvalue = value
 
+    def __repr__(self):
+        return str(self.intvalue)
+
 class BigInt(Number):
 
     type = 'bigint'
@@ -396,6 +399,9 @@ class Bool(Value):
     def __init__(self, space, value):
         self.space = space
         self.boolvalue = value
+
+    def __repr__(self):
+        return str(self.boolvalue)
 
 class Null(Value):
 
@@ -1041,7 +1047,6 @@ def mainloop(filename, source):
         tos = interpreter.stack[-1]
         bytecode = interpreter.program.programs[name]
         ctx = CodeContext(name, pc, bytecode, tos, interpreter)
-        #print ctx.opcode, ctx.opval, ctx.tos.evaluations
         interpreter.dispatch(ctx)
         name, pc = ctx.name, ctx.pc
         if interpreter.error is not None:
