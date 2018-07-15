@@ -573,7 +573,7 @@ def run_bin_sub(left, right):
     else:
         raise ValueError('invalid sub operation')
 
-def run_bin_mul(left, op, right):
+def run_bin_mul(left, right):
     if isinstance(left, Int) and isinstance(right, Int):
         return Int(left.space, left.intvalue * right.intvalue)
     if isinstance(left, Float) and isinstance(right, Int):
