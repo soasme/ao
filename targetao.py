@@ -549,171 +549,173 @@ class Space(object):
         return Function(self, id, frame)
 
 
-def run_bin(left, op, right):
-    if op == BINARY_ADD:
-        if isinstance(left, Int) and isinstance(right, Int):
-            return Int(left.space, left.intvalue + right.intvalue)
-        if isinstance(left, Float) and isinstance(right, Int):
-            return Float(left.space, left.floatvalue + right.intvalue)
-        if isinstance(left, Float) and isinstance(right, Float):
-            return Float(left.space, left.floatvalue + right.floatvalue)
-        if isinstance(left, Int) and isinstance(right, Float):
-            return Float(left.space, left.intvalue + right.floatvalue)
-        else:
-            raise ValueError('invalid add operation')
-    elif op == BINARY_SUB:
-        if isinstance(left, Int) and isinstance(right, Int):
-            return Int(left.space, left.intvalue - right.intvalue)
-        if isinstance(left, Float) and isinstance(right, Int):
-            return Float(left.space, left.floatvalue - right.intvalue)
-        if isinstance(left, Float) and isinstance(right, Float):
-            return Float(left.space, left.floatvalue - right.floatvalue)
-        if isinstance(left, Int) and isinstance(right, Float):
-            return Float(left.space, left.intvalue - right.floatvalue)
-        else:
-            raise ValueError('invalid add operation')
-    if op == BINARY_MUL:
-        if isinstance(left, Int) and isinstance(right, Int):
-            return Int(left.space, left.intvalue * right.intvalue)
-        if isinstance(left, Float) and isinstance(right, Int):
-            return Float(left.space, left.floatvalue * right.intvalue)
-        if isinstance(left, Float) and isinstance(right, Float):
-            return Float(left.space, left.floatvalue * right.floatvalue)
-        if isinstance(left, Int) and isinstance(right, Float):
-            return Float(left.space, left.intvalue * right.floatvalue)
-        else:
-            raise ValueError('invalid add operation')
-    elif op == BINARY_DIV:
-        if isinstance(left, Int) and isinstance(right, Int):
-            return Int(left.space, left.intvalue / right.intvalue)
-        if isinstance(left, Float) and isinstance(right, Int):
-            return Float(left.space, left.floatvalue / right.intvalue)
-        if isinstance(left, Float) and isinstance(right, Float):
-            return Float(left.space, left.floatvalue / right.floatvalue)
-        if isinstance(left, Int) and isinstance(right, Float):
-            return Float(left.space, left.intvalue / right.floatvalue)
-        else:
-            raise ValueError('invalid add operation')
-    elif op == BINARY_MOD:
-        if isinstance(left, Int) and isinstance(right, Int):
-            return Int(left.space, left.intvalue % right.intvalue)
-        # if isinstance(left, Float) and isinstance(right, Int):
-            # return Float(left.space, left.floatvalue % right.intvalue)
-        # if isinstance(left, Float) and isinstance(right, Float):
-            # return Float(left.space, left.floatvalue % right.floatvalue)
-        # if isinstance(left, Int) and isinstance(right, Float):
-            # return Float(left.space, left.intvalue % right.floatvalue)
-        else:
-            raise ValueError('invalid add operation')
-    elif op == BINARY_LSHIFT:
-        if isinstance(left, Int) and isinstance(right, Int):
-            return Int(left.space, left.intvalue << right.intvalue)
-        else:
-            raise ValueError('invalid add operation')
-    elif op == BINARY_RSHIFT:
-        if isinstance(left, Int) and isinstance(right, Int):
-            return Int(left.space, left.intvalue >> right.intvalue)
-        else:
-            raise ValueError('invalid add operation')
-    elif op == BINARY_EQ:
-        if isinstance(left, Int) and isinstance(right, Int):
-            if left.intvalue == right.intvalue:
-                return left.space.true
-            else:
-                return left.space.false
-        elif isinstance(left, Float) and isinstance(right, Float):
-            if left.floatvalue == right.floatvalue:
-                return left.space.true
-            else:
-                return left.space.false
-        elif isinstance(left, Str) and isinstance(right, Str):
-            if left.strvalue == right.strvalue:
-                return left.space.true
-            else:
-                return left.space.false
-        elif isinstance(left, Bool) and isinstance(right, Bool):
-            if left.boolvalue == right.boolvalue:
-                return left.space.true
-            else:
-                return left.space.false
-        elif isinstance(left, Null) and isinstance(right, Null):
-            return left.space.true
-        elif isinstance(left, Array) and isinstance(right, Array):
-            if len(left.arrayvalue) == 0 and len(right.arrayvalue) == 0:
-                return left.space.true
-            if len(left.arrayvalue) != len(right.arrayvalue):
-                return left.space.false
-            for index in range(len(left.arrayvalue)):
-                le = left.arrayvalue[index]
-                re = right.arrayvalue[index]
-                if not run_bin(le, BINARY_EQ, re).boolvalue:
-                    return left.space.false
-            return left.space.true
-        elif isinstance(left, Object) and isinstance(right, Object):
-            if len(left.objectvalue) == 0 and len(right.objectvalue) == 0:
-                return left.space.true
-            if len(left.objectvalue) != len(right.objectvalue):
-                return left.space.false
-            for k in left.objectvalue:
-                if k not in right.objectvalue:
-                    return left.space.false
-                if not run_bin(left.objectvalue[k],
-                        BINARY_EQ, right.objectvalue[k]).boolvalue:
-                    return left.space.false
-            return left.space.true
-        else:
-            return left.space.false
-    elif op == BINARY_NE:
-        if run_bin(left, BINARY_EQ, right).boolvalue:
-            return left.space.false
-        else:
-            return left.space.true
-    elif op == BINARY_GT:
-        if isinstance(left, Int) and isinstance(right, Int):
-            return Int(left.space, left.intvalue > right.intvalue)
-        if isinstance(left, Float) and isinstance(right, Int):
-            return Float(left.space, left.floatvalue > right.intvalue)
-        if isinstance(left, Float) and isinstance(right, Float):
-            return Float(left.space, left.floatvalue > right.floatvalue)
-        if isinstance(left, Int) and isinstance(right, Float):
-            return Float(left.space, left.intvalue > right.floatvalue)
-        else:
-            raise ValueError('invalid ge operation')
-    elif op == BINARY_GE:
-        if isinstance(left, Int) and isinstance(right, Int):
-            return Int(left.space, left.intvalue >= right.intvalue)
-        if isinstance(left, Float) and isinstance(right, Int):
-            return Float(left.space, left.floatvalue >= right.intvalue)
-        if isinstance(left, Float) and isinstance(right, Float):
-            return Float(left.space, left.floatvalue >= right.floatvalue)
-        if isinstance(left, Int) and isinstance(right, Float):
-            return Float(left.space, left.intvalue >= right.floatvalue)
-        else:
-            raise ValueError('invalid ge operation')
-    elif op == BINARY_LT:
-        if isinstance(left, Int) and isinstance(right, Int):
-            return Int(left.space, left.intvalue < right.intvalue)
-        if isinstance(left, Float) and isinstance(right, Int):
-            return Float(left.space, left.floatvalue < right.intvalue)
-        if isinstance(left, Float) and isinstance(right, Float):
-            return Float(left.space, left.floatvalue < right.floatvalue)
-        if isinstance(left, Int) and isinstance(right, Float):
-            return Float(left.space, left.intvalue < right.floatvalue)
-        else:
-            raise ValueError('invalid ge operation')
-    elif op == BINARY_LE:
-        if isinstance(left, Int) and isinstance(right, Int):
-            return Int(left.space, left.intvalue <= right.intvalue)
-        if isinstance(left, Float) and isinstance(right, Int):
-            return Float(left.space, left.floatvalue <= right.intvalue)
-        if isinstance(left, Float) and isinstance(right, Float):
-            return Float(left.space, left.floatvalue <= right.floatvalue)
-        if isinstance(left, Int) and isinstance(right, Float):
-            return Float(left.space, left.intvalue <= right.floatvalue)
-        else:
-            raise ValueError('invalid ge operation')
+def run_bin_add(left, right):
+    if isinstance(left, Int) and isinstance(right, Int):
+        return Int(left.space, left.intvalue + right.intvalue)
+    if isinstance(left, Float) and isinstance(right, Int):
+        return Float(left.space, left.floatvalue + right.intvalue)
+    if isinstance(left, Float) and isinstance(right, Float):
+        return Float(left.space, left.floatvalue + right.floatvalue)
+    if isinstance(left, Int) and isinstance(right, Float):
+        return Float(left.space, left.intvalue + right.floatvalue)
     else:
         raise ValueError('invalid add operation')
+
+def run_bin_sub(left, right):
+    if isinstance(left, Int) and isinstance(right, Int):
+        return Int(left.space, left.intvalue - right.intvalue)
+    if isinstance(left, Float) and isinstance(right, Int):
+        return Float(left.space, left.floatvalue - right.intvalue)
+    if isinstance(left, Float) and isinstance(right, Float):
+        return Float(left.space, left.floatvalue - right.floatvalue)
+    if isinstance(left, Int) and isinstance(right, Float):
+        return Float(left.space, left.intvalue - right.floatvalue)
+    else:
+        raise ValueError('invalid sub operation')
+
+def run_bin_mul(left, op, right):
+    if isinstance(left, Int) and isinstance(right, Int):
+        return Int(left.space, left.intvalue * right.intvalue)
+    if isinstance(left, Float) and isinstance(right, Int):
+        return Float(left.space, left.floatvalue * right.intvalue)
+    if isinstance(left, Float) and isinstance(right, Float):
+        return Float(left.space, left.floatvalue * right.floatvalue)
+    if isinstance(left, Int) and isinstance(right, Float):
+        return Float(left.space, left.intvalue * right.floatvalue)
+    else:
+        raise ValueError('invalid mul operation')
+
+def run_bin_div(left, right):
+    if isinstance(left, Int) and isinstance(right, Int):
+        return Int(left.space, left.intvalue / right.intvalue)
+    if isinstance(left, Float) and isinstance(right, Int):
+        return Float(left.space, left.floatvalue / right.intvalue)
+    if isinstance(left, Float) and isinstance(right, Float):
+        return Float(left.space, left.floatvalue / right.floatvalue)
+    if isinstance(left, Int) and isinstance(right, Float):
+        return Float(left.space, left.intvalue / right.floatvalue)
+    else:
+        raise ValueError('invalid div operation')
+
+def run_bin_mod(left, right):
+    if isinstance(left, Int) and isinstance(right, Int):
+        return Int(left.space, left.intvalue % right.intvalue)
+    else:
+        raise ValueError('invalid mod operation')
+
+def run_bin_lshift(left, right):
+    if isinstance(left, Int) and isinstance(right, Int):
+        return Int(left.space, left.intvalue << right.intvalue)
+    else:
+        raise ValueError('invalid add operation')
+
+def run_bin_rshift(left, right):
+    if isinstance(left, Int) and isinstance(right, Int):
+        return Int(left.space, left.intvalue >> right.intvalue)
+    else:
+        raise ValueError('invalid add operation')
+
+def run_bin_eq(left, right):
+    if isinstance(left, Int) and isinstance(right, Int):
+        if left.intvalue == right.intvalue:
+            return left.space.true
+        else:
+            return left.space.false
+    elif isinstance(left, Float) and isinstance(right, Float):
+        if left.floatvalue == right.floatvalue:
+            return left.space.true
+        else:
+            return left.space.false
+    elif isinstance(left, Str) and isinstance(right, Str):
+        if left.strvalue == right.strvalue:
+            return left.space.true
+        else:
+            return left.space.false
+    elif isinstance(left, Bool) and isinstance(right, Bool):
+        if left.boolvalue == right.boolvalue:
+            return left.space.true
+        else:
+            return left.space.false
+    elif isinstance(left, Null) and isinstance(right, Null):
+        return left.space.true
+    elif isinstance(left, Array) and isinstance(right, Array):
+        if len(left.arrayvalue) == 0 and len(right.arrayvalue) == 0:
+            return left.space.true
+        if len(left.arrayvalue) != len(right.arrayvalue):
+            return left.space.false
+        for index in range(len(left.arrayvalue)):
+            le = left.arrayvalue[index]
+            re = right.arrayvalue[index]
+            if not run_bin_eq(le, re).boolvalue:
+                return left.space.false
+        return left.space.true
+    elif isinstance(left, Object) and isinstance(right, Object):
+        if len(left.objectvalue) == 0 and len(right.objectvalue) == 0:
+            return left.space.true
+        if len(left.objectvalue) != len(right.objectvalue):
+            return left.space.false
+        for k in left.objectvalue:
+            if k not in right.objectvalue:
+                return left.space.false
+            if not run_bin_eq(left.objectvalue[k], right.objectvalue[k]).boolvalue:
+                return left.space.false
+        return left.space.true
+    else:
+        return left.space.false
+
+def run_bin_ne(left, right):
+    if run_bin_eq(left, right).boolvalue:
+        return left.space.false
+    else:
+        return left.space.true
+
+def run_bin_gt(left, right):
+    if isinstance(left, Int) and isinstance(right, Int):
+        return Int(left.space, left.intvalue > right.intvalue)
+    if isinstance(left, Float) and isinstance(right, Int):
+        return Float(left.space, left.floatvalue > right.intvalue)
+    if isinstance(left, Float) and isinstance(right, Float):
+        return Float(left.space, left.floatvalue > right.floatvalue)
+    if isinstance(left, Int) and isinstance(right, Float):
+        return Float(left.space, left.intvalue > right.floatvalue)
+    else:
+        raise ValueError('invalid ge operation')
+
+def run_bin_ge(left, right):
+    if isinstance(left, Int) and isinstance(right, Int):
+        return Int(left.space, left.intvalue >= right.intvalue)
+    if isinstance(left, Float) and isinstance(right, Int):
+        return Float(left.space, left.floatvalue >= right.intvalue)
+    if isinstance(left, Float) and isinstance(right, Float):
+        return Float(left.space, left.floatvalue >= right.floatvalue)
+    if isinstance(left, Int) and isinstance(right, Float):
+        return Float(left.space, left.intvalue >= right.floatvalue)
+    else:
+        raise ValueError('invalid ge operation')
+
+def run_bin_lt(left, right):
+    if isinstance(left, Int) and isinstance(right, Int):
+        return Int(left.space, left.intvalue < right.intvalue)
+    if isinstance(left, Float) and isinstance(right, Int):
+        return Float(left.space, left.floatvalue < right.intvalue)
+    if isinstance(left, Float) and isinstance(right, Float):
+        return Float(left.space, left.floatvalue < right.floatvalue)
+    if isinstance(left, Int) and isinstance(right, Float):
+        return Float(left.space, left.intvalue < right.floatvalue)
+    else:
+        raise ValueError('invalid ge operation')
+
+def run_bin_le(left, right):
+    if isinstance(left, Int) and isinstance(right, Int):
+        return Int(left.space, left.intvalue <= right.intvalue)
+    if isinstance(left, Float) and isinstance(right, Int):
+        return Float(left.space, left.floatvalue <= right.intvalue)
+    if isinstance(left, Float) and isinstance(right, Float):
+        return Float(left.space, left.floatvalue <= right.floatvalue)
+    if isinstance(left, Int) and isinstance(right, Float):
+        return Float(left.space, left.intvalue <= right.floatvalue)
+    else:
+        raise ValueError('invalid ge operation')
 
 class CodeContext(object):
 
@@ -867,79 +869,79 @@ class Interpreter(BaseInterpreter):
 
     def run_BINARY_ADD(self, ctx):
         right, left = ctx.tos.pop(), ctx.tos.pop()
-        val = run_bin(left, BINARY_ADD, right)
+        val = run_bin_add(left, right)
         ctx.tos.push(val)
         ctx.pc += 1
 
     def run_BINARY_SUB(self, ctx):
         right, left = ctx.tos.pop(), ctx.tos.pop()
-        val = run_bin(left, BINARY_SUB, right)
+        val = run_bin_sub(left, right)
         ctx.tos.push(val)
         ctx.pc += 1
 
     def run_BINARY_MUL(self, ctx):
         right, left = ctx.tos.pop(), ctx.tos.pop()
-        val = run_bin(left, BINARY_MUL, right)
+        val = run_bin_mul(left, right)
         ctx.tos.push(val)
         ctx.pc += 1
 
     def run_BINARY_DIV(self, ctx):
         right, left = ctx.tos.pop(), ctx.tos.pop()
-        val = run_bin(left, BINARY_DIV, right)
+        val = run_bin_div(left, right)
         ctx.tos.push(val)
         ctx.pc += 1
 
     def run_BINARY_MOD(self, ctx):
         right, left = ctx.tos.pop(), ctx.tos.pop()
-        val = run_bin(left, BINARY_MOD, right)
+        val = run_bin_mod(left, right)
         ctx.tos.push(val)
         ctx.pc += 1
 
     def run_BINARY_LSHIFT(self, ctx):
         right, left = ctx.tos.pop(), ctx.tos.pop()
-        val = run_bin(left, BINARY_LSHIFT, right)
+        val = run_bin_lshift(left, right)
         ctx.tos.push(val)
         ctx.pc += 1
 
     def run_BINARY_RSHIFT(self, ctx):
         right, left = ctx.tos.pop(), ctx.tos.pop()
-        val = run_bin(left, BINARY_RSHIFT, right)
+        val = run_bin_rshift(left, right)
         ctx.tos.push(val)
         ctx.pc += 1
 
     def run_BINARY_EQ(self, ctx):
         right, left = ctx.tos.pop(), ctx.tos.pop()
-        val = run_bin(left, BINARY_EQ, right)
+        val = run_bin_eq(left, right)
         ctx.tos.push(val)
         ctx.pc += 1
 
     def run_BINARY_NE(self, ctx):
         right, left = ctx.tos.pop(), ctx.tos.pop()
-        val = run_bin(left, BINARY_NE, right)
+        val = run_bin_ne(left, right)
         ctx.tos.push(val)
         ctx.pc += 1
 
     def run_BINARY_GE(self, ctx):
         right, left = ctx.tos.pop(), ctx.tos.pop()
-        val = run_bin(left, BINARY_GE, right)
+        val = run_bin_ge(left, right)
         ctx.tos.push(val)
         ctx.pc += 1
 
     def run_BINARY_LE(self, ctx):
         right, left = ctx.tos.pop(), ctx.tos.pop()
-        val = run_bin(left, BINARY_LE, right)
+        val = run_bin_le(left, right)
         ctx.tos.push(val)
         ctx.pc += 1
 
     def run_BINARY_GT(self, ctx):
         right, left = ctx.tos.pop(), ctx.tos.pop()
-        val = run_bin(left, BINARY_GT, right)
+        val = run_bin_gt(left, right)
         ctx.tos.push(val)
         ctx.pc += 1
 
     def run_BINARY_LT(self, ctx):
         right, left = ctx.tos.pop(), ctx.tos.pop()
-        val = run_bin(left, BINARY_LT, right)
+        val = run_bin_lt(left, right)
         ctx.tos.push(val)
         ctx.pc += 1
 
