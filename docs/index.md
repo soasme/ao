@@ -40,20 +40,20 @@ a = 1
 b = 2
 c = 3
 
-if (a <= b and b <= c) {
+if a <= b and b <= c {
     print "a, b, c are increasing."
-} elif (a >= b and b >= c) {
+} elif a >= b and b >= c {
     print "a, b, c are decreasing."
 } else {
     print "a, b, c are in random order."
 }
 
-while (c <= 0) {
+while c <= 0 {
     print c
     c = c - 1
 }
 
-while (true) {
+while true {
     print "loop"
 }
 ```
@@ -127,8 +127,9 @@ The AO Philosophy:
 * Correctness.
     * Make it right. Fix the bug if we catch one. :)
 * Battery-included.
-    * Softwares are meant to solve problems. AO ships with a set of handy libraries including text processing, binary data processing, time processing, a set of advanced data structures and algorithms, mathmatical calculation, functional programming, system programming, serialization and deserialization, protocols and formats, logging, web programming, game programming, concurrency, IPC and networking, parsers for different languages, multimedia programming, i18n, GUI programming, testing and debugging packaging and distribution, clients for data-intensive systems, science programming, shell programming, etc.
+    * Softwares are meant to solve problems. AO ships with a set of handy libraries.
 
 ## License
 
 AO comes with MIT license.
+

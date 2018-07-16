@@ -255,7 +255,7 @@ my_function = f() {
 }
 
 value or error = my_function()
-if (error == "customized-error") {
+if error == "customized-error" {
     value = 0
 } else {
     raise(error)

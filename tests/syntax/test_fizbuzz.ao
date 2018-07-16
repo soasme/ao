@@ -1,9 +1,9 @@
 fizbuzz = f(n) {
-    if (n % 3 == 0 and n % 5 == 0) {
+    if n % 3 == 0 and n % 5 == 0 {
         return "fizbuzz"
-    } elif (n % 3 == 0) {
+    } elif n % 3 == 0 {
         return "fiz"
-    } elif (n % 5 == 0) {
+    } elif n % 5 == 0 {
         return "buzz"
     } else {
         return n

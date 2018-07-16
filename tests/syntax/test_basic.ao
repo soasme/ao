@@ -50,13 +50,13 @@ print not not []
 print not not {"key": "value"}
 print not not {}
 
-if (true) {
+if true {
     print "yes"
 } else {
     print "no"
 }
 
-if (false) {
+if false {
     print "yes"
 } else {
     print "no"
@@ -64,7 +64,7 @@ if (false) {
 
 i = 0
 
-while (i < 10) {
+while i < 10 {
     print i
     i = i + 1
 }
