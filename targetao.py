@@ -717,17 +717,13 @@ def run_bin(left, op, right):
 
 class CodeContext(object):
 
-    def __init__(self, name, pc, bytecode, tos, interpreter):
+    def __init__(self, name, pc, opcode, opval, opname):
         self.name = name
         self.pc = pc
-        self.bytecode = bytecode
-        self.op = bytecode.instructions[pc]
-        self.opcode = self.op[0]
-        self.opval = 0 if len(self.op) == 1 else self.op[1]
-        self.opname = CODES[self.opcode]
-        self.tos = tos
-        tos.save_pc(pc)
-        self.interpreter = interpreter
+        self.opcode = opcode
+        self.opval = opval
+        self.opname = opname
+
 
 def make_dispatch_function(**dispatch_table):
     def dispatch(self, ctx):
@@ -758,60 +754,66 @@ class Interpreter(BaseInterpreter):
         self.space = Space()
         self.stack = [Frame(entry, space=self.space, bytecode=program.programs[entry])]
 
+    def tos(self):
+        return self.stack[-1]
+
+    def get_bytecode(self, name):
+        return self.program.programs[name]
+
     def run_PRINT(self, ctx):
-        val = ctx.tos.pop()
+        val = self.tos().pop()
         print(self.space.toprintstr(val))
         ctx.pc += 1
 
     def run_LOAD_LITERAL(self, ctx):
-        lit = ctx.bytecode.get_literal(ctx.opval)
+        lit = self.get_bytecode(ctx.name).get_literal(ctx.opval)
         val = self.space.newliteral(lit)
-        ctx.tos.push(val)
+        self.tos().push(val)
         ctx.pc += 1
 
     def run_SAVE_VARIABLE(self, ctx):
-        sym = ctx.bytecode.get_symbol(ctx.opval)
-        ctx.tos.save(sym, ctx.tos.pop(), ctx.tos)
+        sym = self.get_bytecode(ctx.name).get_symbol(ctx.opval)
+        self.tos().save(sym, self.tos().pop(), self.tos())
         ctx.pc += 1
 
     def run_LOAD_VARIABLE(self, ctx):
-        sym = ctx.bytecode.get_symbol(ctx.opval)
-        ctx.tos.push(ctx.tos.load(sym))
+        sym = self.get_bytecode(ctx.name).get_symbol(ctx.opval)
+        self.tos().push(self.tos().load(sym))
         ctx.pc += 1
 
     def run_MAKE_ARRAY(self, ctx):
         length = ctx.opval
-        args = [ctx.tos.pop() for _ in range(length)]
+        args = [self.tos().pop() for _ in range(length)]
         val = self.space.newarray(args)
-        ctx.tos.push(val)
+        self.tos().push(val)
         ctx.pc += 1
 
     def run_MAKE_OBJECT(self, ctx):
         length = ctx.opval
         obj = {}
         for _ in range(ctx.opval):
-            key = ctx.tos.pop()
-            value = ctx.tos.pop()
+            key = self.tos().pop()
+            value = self.tos().pop()
             assert isinstance(value, Value)
             obj[key] = value
         val = self.space.newobject(obj)
-        ctx.tos.push(val)
+        self.tos().push(val)
         ctx.pc += 1
 
     def run_LOAD_FUNCTION(self, ctx):
-        sym = ctx.bytecode.get_symbol(ctx.opval)
-        val = self.space.newfunction(sym, ctx.tos)
-        ctx.tos.push(val)
+        sym = self.get_bytecode(ctx.name).get_symbol(ctx.opval)
+        val = self.space.newfunction(sym, self.tos())
+        self.tos().push(val)
         ctx.pc += 1
 
     def run_CALL_FUNCTION(self, ctx):
-        func_val = ctx.tos.pop()
+        func_val = self.tos().pop()
         if func_val.id.startswith('@@'):
             params = []
             for i in range(ctx.opval):
-                params.append(ctx.tos.pop())
+                params.append(self.tos().pop())
             builtin = MODULE[func_val.id[2:]]
-            builtin(BuiltinContext(self, ctx.tos, ctx.bytecode, params))
+            builtin(BuiltinContext(self, self.tos(), self.get_bytecode(ctx.name), params))
             ctx.pc += 1
         else:
             func_bytecode = self.program.programs[func_val.id]
@@ -821,13 +823,13 @@ class Interpreter(BaseInterpreter):
                     parent=parent_frame, bytecode=func_bytecode)
             for i in range(ctx.opval):
                 argv_i_sym = func_bytecode.get_symbol(ctx.opval - i - 1)
-                new_frame.save(argv_i_sym, ctx.tos.pop(), new_frame)
+                new_frame.save(argv_i_sym, self.tos().pop(), new_frame)
             self.stack.append(new_frame)
             ctx.name = func_val.id
             ctx.pc = 0
 
     def run_RETURN_VALUE(self, ctx):
-        ret_val = ctx.tos.pop() if ctx.tos.evaluations else self.space.null
+        ret_val = self.tos().pop() if self.tos().evaluations else self.space.null
         self.stack.pop()
         prev_tos = self.stack[-1]
         prev_tos.push(ret_val)
@@ -838,25 +840,25 @@ class Interpreter(BaseInterpreter):
         ctx.pc = ctx.opval
 
     def run_JUMP_IF_TRUE_AND_POP(self, ctx):
-        val = ctx.tos.pop()
+        val = self.tos().pop()
         ctx.pc = ctx.opval if self.space.castbool(val) else ctx.pc + 1
 
     def run_JUMP_IF_FALSE_AND_POP(self, ctx):
-        val = ctx.tos.pop()
+        val = self.tos().pop()
         ctx.pc = ctx.opval if not self.space.castbool(val) else ctx.pc + 1
 
     def run_JUMP_IF_TRUE_OR_POP(self, ctx):
-        val = ctx.tos.peek()
+        val = self.tos().peek()
         if self.space.castbool(val):
             ctx.pc = ctx.opval
         else:
-            ctx.tos.pop()
+            self.tos().pop()
             ctx.pc += 1
 
     def run_JUMP_IF_FALSE_OR_POP(self, ctx):
-        val = ctx.tos.peek()
+        val = self.tos().peek()
         if self.space.castbool(val):
-            ctx.tos.pop()
+            self.tos().pop()
             ctx.pc += 1
         else:
             ctx.pc = ctx.opval
@@ -866,93 +868,93 @@ class Interpreter(BaseInterpreter):
         self.running = False
 
     def run_BINARY_ADD(self, ctx):
-        right, left = ctx.tos.pop(), ctx.tos.pop()
+        right, left = self.tos().pop(), self.tos().pop()
         val = run_bin(left, BINARY_ADD, right)
-        ctx.tos.push(val)
+        self.tos().push(val)
         ctx.pc += 1
 
     def run_BINARY_SUB(self, ctx):
-        right, left = ctx.tos.pop(), ctx.tos.pop()
+        right, left = self.tos().pop(), self.tos().pop()
         val = run_bin(left, BINARY_SUB, right)
-        ctx.tos.push(val)
+        self.tos().push(val)
         ctx.pc += 1
 
     def run_BINARY_MUL(self, ctx):
-        right, left = ctx.tos.pop(), ctx.tos.pop()
+        right, left = self.tos().pop(), self.tos().pop()
         val = run_bin(left, BINARY_MUL, right)
-        ctx.tos.push(val)
+        self.tos().push(val)
         ctx.pc += 1
 
     def run_BINARY_DIV(self, ctx):
-        right, left = ctx.tos.pop(), ctx.tos.pop()
+        right, left = self.tos().pop(), self.tos().pop()
         val = run_bin(left, BINARY_DIV, right)
-        ctx.tos.push(val)
+        self.tos().push(val)
         ctx.pc += 1
 
     def run_BINARY_MOD(self, ctx):
-        right, left = ctx.tos.pop(), ctx.tos.pop()
+        right, left = self.tos().pop(), self.tos().pop()
         val = run_bin(left, BINARY_MOD, right)
-        ctx.tos.push(val)
+        self.tos().push(val)
         ctx.pc += 1
 
     def run_BINARY_LSHIFT(self, ctx):
-        right, left = ctx.tos.pop(), ctx.tos.pop()
+        right, left = self.tos().pop(), self.tos().pop()
         val = run_bin(left, BINARY_LSHIFT, right)
-        ctx.tos.push(val)
+        self.tos().push(val)
         ctx.pc += 1
 
     def run_BINARY_RSHIFT(self, ctx):
-        right, left = ctx.tos.pop(), ctx.tos.pop()
+        right, left = self.tos().pop(), self.tos().pop()
         val = run_bin(left, BINARY_RSHIFT, right)
-        ctx.tos.push(val)
+        self.tos().push(val)
         ctx.pc += 1
 
     def run_BINARY_EQ(self, ctx):
-        right, left = ctx.tos.pop(), ctx.tos.pop()
+        right, left = self.tos().pop(), self.tos().pop()
         val = run_bin(left, BINARY_EQ, right)
-        ctx.tos.push(val)
+        self.tos().push(val)
         ctx.pc += 1
 
     def run_BINARY_NE(self, ctx):
-        right, left = ctx.tos.pop(), ctx.tos.pop()
+        right, left = self.tos().pop(), self.tos().pop()
         val = run_bin(left, BINARY_NE, right)
-        ctx.tos.push(val)
+        self.tos().push(val)
         ctx.pc += 1
 
     def run_BINARY_GE(self, ctx):
-        right, left = ctx.tos.pop(), ctx.tos.pop()
+        right, left = self.tos().pop(), self.tos().pop()
         val = run_bin(left, BINARY_GE, right)
-        ctx.tos.push(val)
+        self.tos().push(val)
         ctx.pc += 1
 
     def run_BINARY_LE(self, ctx):
-        right, left = ctx.tos.pop(), ctx.tos.pop()
+        right, left = self.tos().pop(), self.tos().pop()
         val = run_bin(left, BINARY_LE, right)
-        ctx.tos.push(val)
+        self.tos().push(val)
         ctx.pc += 1
 
     def run_BINARY_GT(self, ctx):
-        right, left = ctx.tos.pop(), ctx.tos.pop()
+        right, left = self.tos().pop(), self.tos().pop()
         val = run_bin(left, BINARY_GT, right)
-        ctx.tos.push(val)
+        self.tos().push(val)
         ctx.pc += 1
 
     def run_BINARY_LT(self, ctx):
-        right, left = ctx.tos.pop(), ctx.tos.pop()
+        right, left = self.tos().pop(), self.tos().pop()
         val = run_bin(left, BINARY_LT, right)
-        ctx.tos.push(val)
+        self.tos().push(val)
         ctx.pc += 1
 
     def run_LOGICAL_NOT(self, ctx):
-        val = ctx.tos.pop()
+        val = self.tos().pop()
         val = self.space.castbool(val)
         val = self.space.false if val else self.space.true
-        ctx.tos.push(val)
+        self.tos().push(val)
         ctx.pc += 1
 
     def run_CATCH_ERROR(self, ctx):
-        sym = ctx.bytecode.get_symbol(ctx.opval)
-        ctx.tos.catch(sym)
+        sym = self.get_bytecode(ctx.name).get_symbol(ctx.opval)
+        self.tos().catch(sym)
         ctx.pc += 1
 
 
@@ -1034,6 +1036,17 @@ def crash_stack(machine):
     if machine.exit_code == 0:
         machine.exit_code = 1
 
+    # def __init__(self, name, pc, bytecode, tos, interpreter):
+        # self.name = name
+        # self.pc = pc
+        # self.bytecode = bytecode
+        # self.op = bytecode.instructions[pc]
+        # self.opcode = self.op[0]
+        # self.opval = 0 if len(self.op) == 1 else self.op[1]
+        # self.opname = CODES[self.opcode]
+        # self.tos = tos
+        # tos.save_pc(pc)
+        # self.interpreter = interpreter
 def mainloop(filename, source):
     pc = 0
     name = filename
@@ -1045,8 +1058,13 @@ def mainloop(filename, source):
     while pc < len(compiler.programs[name].instructions) and interpreter.running:
         jitdriver.jit_merge_point(pc=pc, name=name, program=compiler, machine=interpreter)
         tos = interpreter.stack[-1]
-        bytecode = interpreter.program.programs[name]
-        ctx = CodeContext(name, pc, bytecode, tos, interpreter)
+        tos.save_pc(pc)
+        bytecode = interpreter.get_bytecode(name)
+        op = bytecode.instructions[pc]
+        opcode = op[0]
+        opval = 0 if len(op) == 1 else op[1]
+        opname = CODES[opcode]
+        ctx = CodeContext(name, pc, opcode, opval, opname)
         interpreter.dispatch(ctx)
         name, pc = ctx.name, ctx.pc
         if interpreter.error is not None:
