@@ -4,7 +4,7 @@ sudo: required
 dist: trusty
 group: edge
 install: "pip install rpython"
-script: make run-tests && make opt-compile
+script: make run-py-tests opt-compile run-ao-tests
 #jobs:
   #include:
     #- stage: "Main builds"
