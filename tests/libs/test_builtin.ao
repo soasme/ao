@@ -1,23 +1,23 @@
-assert(bool([]) == false);
+assert(bool([]) == false)
 
-assert(bool([1]) == true);
+assert(bool([1]) == true)
 
-assert(bool({}) == false);
+assert(bool({}) == false)
 
-assert(bool({"key": "value"}) == true);
+assert(bool({"key": "value"}) == true)
 
-assert(bool(true) == true);
+assert(bool(true) == true)
 
-assert(bool(false) == false);
+assert(bool(false) == false)
 
-assert(bool(null) == false);
+assert(bool(null) == false)
 
-assert(bool(1) == true);
+assert(bool(1) == true)
 
-assert(bool(0) == false);
+assert(bool(0) == false)
 
 # TODO:... please add more bool tests.
 
-assert(type(true) == "bool");
+assert(type(true) == "bool")
 
-assert(type(false) == "bool");
+assert(type(false) == "bool")

@@ -1,11 +1,11 @@
-a = 1;
-print a;
+a = 1
+print a
 
-b = a;
-print b;
+b = a
+print b
 
-a = b;
-print a;
+a = b
+print a
 
-b = "hello world";
-print b;
+b = "hello world"
+print b

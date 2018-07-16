@@ -1,70 +1,70 @@
-print 1;
-print "hello world";
-print true;
-print false;
-print [];
-print [1];
-print [1,2];
-print [1, 2];
-print [1, 2, ];
-print {};
-print {"key": "value"};
+print 1
+print "hello world"
+print true
+print false
+print []
+print [1]
+print [1,2]
+print [1, 2]
+print [1, 2, ]
+print {}
+print {"key": "value"}
 print [1,
 2,
-3];
+3]
 print {"key":
-"value","kkk": "vvv"};
+"value","kkk": "vvv"}
 
-z = f(v){return v;};
-print z("hello world");
-z = f(v) { return "not hello world"; };
-print z(1);
+z = f(v){return v}
+print z("hello world")
+z = f(v) { return "not hello world" }
+print z(1)
 
-print 1 + 2 + 3;
-print 1 + 2 * 3;
-print 1 * 2 + 3;
-print 1 * 2 * 3;
-print 1 + 2 / 3;
-print 1 * 2 / 3;
-print 1 % 2 + 3;
-print 1 + 2 % 3;
-print 16 >> 2;
-print 16 << 2;
-print -1 + 1;
+print 1 + 2 + 3
+print 1 + 2 * 3
+print 1 * 2 + 3
+print 1 * 2 * 3
+print 1 + 2 / 3
+print 1 * 2 / 3
+print 1 % 2 + 3
+print 1 + 2 % 3
+print 16 >> 2
+print 16 << 2
+print -1 + 1
 
 
-print false or false;
-print true or true;
-print true or false;
-print false or true;
-print true and false;
-print false and true;
-print false and false;
-print true and true;
-print not not 1;
-print not not 0;
-print not not "";
-print not not "hello world";
-print not not [1];
-print not not [];
-print not not {"key": "value"};
-print not not {};
+print false or false
+print true or true
+print true or false
+print false or true
+print true and false
+print false and true
+print false and false
+print true and true
+print not not 1
+print not not 0
+print not not ""
+print not not "hello world"
+print not not [1]
+print not not []
+print not not {"key": "value"}
+print not not {}
 
 if (true) {
-    print "yes";
+    print "yes"
 } else {
-    print "no";
+    print "no"
 }
 
 if (false) {
-    print "yes";
+    print "yes"
 } else {
-    print "no";
+    print "no"
 }
 
-i = 0;
+i = 0
 
 while (i < 10) {
-    print i;
-    i = i + 1;
+    print i
+    i = i + 1
 }

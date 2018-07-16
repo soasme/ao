@@ -1,11 +1,11 @@
 closure = f (n) {
     return f (m) {
-        return n + m;
-    };
-};
+        return n + m
+    }
+}
 
-add_1 = closure(1);
-assert(add_1(1) == 2);
+add_1 = closure(1)
+assert(add_1(1) == 2)
 
-add_2 = closure(2);
-assert(add_2(1) == 3);
+add_2 = closure(2)
+assert(add_2(1) == 3)

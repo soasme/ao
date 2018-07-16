@@ -5,12 +5,12 @@ AO, pronouncing as A-O, is a tiny interpreter language.
 It supports:
 
 * JSON as primitive types: `null`, `true`, `false`, `0`, `1.0`, `"string"`, `[1, 2]`, `{"key": "value"}`.
-* Assignment: `x = 1;`.
-* Function: `double = f (a) { return a * a; };`.
+* Assignment: `x = 1`.
+* Function: `double = f (a) { return a * a }`.
 * Arithmetic: `+`, `-`, `*`, `/`, `%`, `<<`, `>>`, `&`, `|`, `~`.
 * Comparison: `==`, `!=`, `>`, `>=`, `<`, `<=`.
 * Logical: `and`, `or`, `not`.
-* Error handling: `value or error = a_function_might_raise_error();`
+* Error handling: `value or error = a_function_might_raise_error()`
 
 ## Getting Started
 
@@ -23,25 +23,25 @@ All builtin types are JSON based values, expect Function.
 No class, no struct, no trait, no interface, no ..., etc.
 
 ```
-a = 1;
-b = 1.0;
-c = null;
-d = true;
-e = false;
-f = "hello world";
-g = [1, 2, 3];
-h = {"key": "value"};
+a = 1
+b = 1.0
+c = null
+d = true
+e = false
+f = "hello world"
+g = [1, 2, 3]
+h = {"key": "value"}
 ```
 
 Control flow is very traditional.
 
 ```
-a = 1;
-b = 2;
-c = 3;
+a = 1
+b = 2
+c = 3
 
 if (a <= b and b <= c) {
-    print "a, b, c are increasing.";
+    print "a, b, c are increasing."
 } elif (a >= b and b >= c) {
     print "a, b, c are decreasing."
 } else {
@@ -49,12 +49,12 @@ if (a <= b and b <= c) {
 }
 
 while (c <= 0) {
-    print c;
-    c = c - 1;
+    print c
+    c = c - 1
 }
 
 while (true) {
-    print "loop";
+    print "loop"
 }
 ```
 
@@ -62,11 +62,11 @@ Defining function is just yet another assignment.
 
 ```
 i = f (j) {
-    return j * 2;
-};
+    return j * 2
+}
 
-j = i(24);
-print j;
+j = i(24)
+print j
 ```
 
 Function can be closure.
@@ -74,24 +74,24 @@ Function can be closure.
 ```
 g = f (m) {
     return f(n) {
-        return m + n;
-    };
-};
+        return m + n
+    }
+}
 
-plus42 = f(42);
-print plus42(42);
+plus42 = f(42)
+print plus42(42)
 ```
 
 Catch errors.
 
 ```
 badfunction = f () {
-    raise("It can be any type, str, int, object, etc.");
+    raise("It can be any type, str, int, object, etc.")
     # It never returns 1 here.
-    return 1;
-};
+    return 1
+}
 
-value or error = badfunction();
+value or error = badfunction()
 ```
 
 ## Develop

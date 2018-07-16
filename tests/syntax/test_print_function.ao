@@ -1,5 +1,5 @@
-g = f(){ return 1; };
-print g;
+g = f(){ return 1 }
+print g
 
-g = f(){ return 1; };
-print g;
+g = f(){ return 1 }
+print g

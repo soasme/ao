@@ -52,25 +52,25 @@ AO aims to provide simple syntax. This page defines AO syntax.
 Use `=` to bind a value to a name:
 
 ```
-[1]: a = 1;
+[1]: a = 1
 ```
 
 Values can be value to another name:
 
 ```
-[1]: a = 1;
+[1]: a = 1
 
-[2]: b = a;
+[2]: b = a
 ```
 
 Values can be used in array and object:
 
 ```
-[1]: a = 1;
+[1]: a = 1
 
-[2]: b = {"a": a};
+[2]: b = {"a": a}
 
-[3]: c = [a, b];
+[3]: c = [a, b]
 ```
 
 ## Comparisons
@@ -166,12 +166,12 @@ Defining function is just yet another assignment.
 
 ```
 [1]: i = f (j) {
-         return j * 2;
-     };
+         return j * 2
+     }
 
-[2]: j = i(24);
+[2]: j = i(24)
 
-[3]: print j;
+[3]: print j
 48
 ```
 
@@ -180,12 +180,12 @@ Functions can be nested and as return value.
 ```
 g = f (m) {
     return f(n) {
-        return m + n;
-    };
-};
+        return m + n
+    }
+}
 
-plus42 = g(42);
-print plus42(42);
+plus42 = g(42)
+print plus42(42)
 ```
 
 ## Operator reload
@@ -234,12 +234,12 @@ Some operators can be applied to array: `<<`, `>>`, `+`, `-`. The operation yiel
 For array, it also allow `&` for mapping values to a function, allow `|` for filtering values from a function:
 
 ```
-[1]: double = f (n) { return n + n; };
+[1]: double = f (n) { return n + n }
 
 [2]: [1, 2, 3] & double
 [2, 4, 6]
 
-[3]: is_even = f (n) { return n % 2 == 0; };
+[3]: is_even = f (n) { return n % 2 == 0 }
 
 [4]: [1, 2, 3, 4] | is_even
 [2, 4]
@@ -251,14 +251,14 @@ For array, it also allow `&` for mapping values to a function, allow `|` for fil
 
 ```
 my_function = f() {
-    raise("customized-error");
-};
+    raise("customized-error")
+}
 
-value or error = my_function();
+value or error = my_function()
 if (error == "customized-error") {
-    value = 0;
+    value = 0
 } else {
-    raise(error);
+    raise(error)
 }
 ```
 
@@ -290,7 +290,7 @@ if (error == "customized-error") {
 [7]: type("hello world")
 "string"
 
-[8]: type(f () { return null; })
+[8]: type(f () { return null })
 "function"
 ```
 
@@ -305,7 +305,7 @@ if (error == "customized-error") {
 [2]: get([1, 2, 3], 3)
 Traceback: "index-error"
 
-[3]: value or error = get([1, 2, 3], 3);
+[3]: value or error = get([1, 2, 3], 3)
 
 [4]: error
 "index-error"
@@ -331,35 +331,35 @@ Traceback: "index-error"
 [11]: get([1, 2, 3, 4], is_even)
 [2, 4]
 
-[12]: get("https://github.com", http.client({"timeout": 3}));
+[12]: get("https://github.com", http.client({"timeout": 3}))
 {"type": "http.response", "headers": [["Content-Type", "text/html"], ...
 ```
 
 ## ifdefined, ifndefined
 
 ```
-[1]: ifdefined("a");
+[1]: ifdefined("a")
 false
 
-[2]: ifndefined("a");
+[2]: ifndefined("a")
 true
 
-[2]: a = 1;
+[2]: a = 1
 
-[3]: ifdefined("a");
+[3]: ifdefined("a")
 true
 
-[4]: ifndefined("a");
+[4]: ifndefined("a")
 false
 ```
 
 ## delete
 
 ```
-[1]: a = 1;
+[1]: a = 1
 
-[2]: delete("a");
+[2]: delete("a")
 
-[3]: print a;
+[3]: print a
 Traceback: "undefined value"
 ```

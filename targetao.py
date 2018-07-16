@@ -127,7 +127,7 @@ while: ["while"] ["("] expr [")"] block;
 block: ["{"] stmt* ["}"];
 print: ["print"] expr;
 return: ["return"] expr;
-stmt: <print> [";"] | <return> [";"] | <catch> [";"] | <let> [";"] | <if> | <while> | <apply> [";"];
+stmt: <print> | <return> | <catch> | <let> | <if> | <while> | <apply>;
 """
 
 regexes, rules, _to_ast = parse_ebnf(EBNF)

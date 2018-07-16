@@ -1,27 +1,27 @@
 fizbuzz = f(n) {
     if (n % 3 == 0 and n % 5 == 0) {
-        return "fizbuzz";
+        return "fizbuzz"
     } elif (n % 3 == 0) {
-        return "fiz";
+        return "fiz"
     } elif (n % 5 == 0) {
-        return "buzz";
+        return "buzz"
     } else {
-        return n;
+        return n
     }
-};
+}
 
-assert(fizbuzz(1) == 1);
-assert(fizbuzz(2) == 2);
-assert(fizbuzz(3) == "fiz");
-assert(fizbuzz(4) == 4);
-assert(fizbuzz(5) == "buzz");
-assert(fizbuzz(6) == "fiz");
-assert(fizbuzz(7) == 7);
-assert(fizbuzz(8) == 8);
-assert(fizbuzz(9) == "fiz");
-assert(fizbuzz(10) == "buzz");
-assert(fizbuzz(11) == 11);
-assert(fizbuzz(12) == "fiz");
-assert(fizbuzz(13) == 13);
-assert(fizbuzz(14) == 14);
-assert(fizbuzz(15) == "fizbuzz");
+assert(fizbuzz(1) == 1)
+assert(fizbuzz(2) == 2)
+assert(fizbuzz(3) == "fiz")
+assert(fizbuzz(4) == 4)
+assert(fizbuzz(5) == "buzz")
+assert(fizbuzz(6) == "fiz")
+assert(fizbuzz(7) == 7)
+assert(fizbuzz(8) == 8)
+assert(fizbuzz(9) == "fiz")
+assert(fizbuzz(10) == "buzz")
+assert(fizbuzz(11) == 11)
+assert(fizbuzz(12) == "fiz")
+assert(fizbuzz(13) == 13)
+assert(fizbuzz(14) == 14)
+assert(fizbuzz(15) == "fizbuzz")

@@ -1,19 +1,19 @@
 # no argument, no return
-f1 = f() { };
-print f1();
+f1 = f() { }
+print f1()
 
 # no argument, return
-f2 = f() { return 1; };
-print f2();
+f2 = f() { return 1 }
+print f2()
 
 # argument, no return
-f3 = f(v) { };
-print f3(1);
+f3 = f(v) { }
+print f3(1)
 
 # argument, return
-f4 = f(v) { return v; };
-print f4(1);
+f4 = f(v) { return v }
+print f4(1)
 
 # multiple arguments
-f5 = f(v0, v1, v2, v3) { return {"v0": v0, "v1": v1, "v2": v2, "v3": v3}; };
-print f5(1, 2, 3, 4);
+f5 = f(v0, v1, v2, v3) { return {"v0": v0, "v1": v1, "v2": v2, "v3": v3} }
+print f5(1, 2, 3, 4)

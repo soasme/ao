@@ -1,25 +1,25 @@
 if (false) {
-    print "failed";
+    print "failed"
 } elif (true) {
-    print "passed";
+    print "passed"
 } else {
-    print "failed";
+    print "failed"
 }
 
 if (true) {
-    print "passed";
+    print "passed"
 } else {
-    print "failed";
+    print "failed"
 }
 
 if (false) {
-    print "failed";
+    print "failed"
 } else {
-    print "passed";
+    print "passed"
 }
 
 if (true) {
-    print "passed";
+    print "passed"
 }
 
-print "passed";
+print "passed"
