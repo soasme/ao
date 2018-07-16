@@ -3,18 +3,21 @@ badf = f() {
 }
 
 value or error = badf()
-assert(error == "customized error")
+print value
+print error
 
 badff = f() {
     badf()
 }
 
 value or error = badff()
-assert(error == "customized error")
+print value
+print error
 
 object_as_error = f() {
     raise({"code": 404})
 }
 
 value or error = object_as_error()
-assert(error == {"code": 404})
+print value
+print error
