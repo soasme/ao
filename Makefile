@@ -7,5 +7,8 @@ opt-compile:
 debug-example:
 	PYPYLOG=jit-log-opt:logfile ./targetao-c examples/test.ao
 
-run-tests:
+run-py-tests:
 	for i in tests/*/*.ao; do echo $$i; python targetao.py $$i && echo "$$i passed."; done
+
+run-ao-tests:
+	for i in tests/*/*.ao; do echo $$i; ./ao $$i && echo "$$i passed."; done
