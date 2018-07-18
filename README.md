@@ -40,30 +40,30 @@ a = 1
 b = 2
 c = 3
 
-if a <= b and b <= c {
+if a <= b and b <= c then
     print "a, b, c are increasing."
-} elif a >= b and b >= c {
+elif a >= b and b >= c then
     print "a, b, c are decreasing."
-} else {
+else
     print "a, b, c are in random order."
-}
+end
 
-while c <= 0 {
+while c <= 0 do
     print c
     c = c - 1
-}
+end
 
-while true {
+while true do
     print "loop"
-}
+end
 ```
 
 Defining function is just yet another assignment.
 
 ```
-i = f (j) {
+i = f (j)
     return j * 2
-}
+end
 
 j = i(24)
 print j
@@ -72,11 +72,11 @@ print j
 Function can be closure.
 
 ```
-g = f (m) {
-    return f(n) {
+g = f (m)
+    return f(n)
         return m + n
-    }
-}
+    end
+end
 
 plus42 = f(42)
 print plus42(42)
@@ -85,11 +85,11 @@ print plus42(42)
 Catch errors.
 
 ```
-badfunction = f () {
+badfunction = f ()
     raise("It can be any type, str, int, object, etc.")
     # It never returns 1 here.
     return 1
-}
+end
 
 value or error = badfunction()
 ```
