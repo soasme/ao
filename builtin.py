@@ -40,17 +40,18 @@ def builtin_raise(ctx):
 
 
 @as_f('__ffi_dynload__')
-def builtin_dynload(ctx):
-    assert len(ctx.params) == 1 and ctx.params[0].type == 'str'
+def builtin_ffi_dynload(ctx):
+    assert len(ctx.params) == 2 and ctx.params[0].type == 'str' and ctx.params[0].type == 'str'
     libname = ctx.params[0].strvalue
+    libpath = ctx.params[1].strvalue
 
     # load dylib if haven't
-    if libname in ctx.machine.dylibs:
+    if libname in ctx.machine.space.ffi_libs:
         ctx.tos.push(ctx.machine.space.null)
         return
 
     # try to load dylib
-    path = rffi.str2charp(libname)
+    path = rffi.str2charp(libpath)
     try:
         lib = rdynload.dlopen(path)
     except rdynload.DLOpenError as e:
@@ -60,44 +61,127 @@ def builtin_dynload(ctx):
         lltype.free(path, flavor='raw')
 
     # cache dylib
-    ctx.machine.dylibs[libname] = lib
+    ctx.machine.space.ffi_libs[libname] = ctx.machine.space.newforeignlibrary(libname, lib)
     ctx.tos.push(ctx.machine.space.null)
 
-@as_f('dyncdef')
-def builtin_dyncdef(ctx):
-    assert len(ctx.params) == 1 and ctx.params[0].type == 'str' and ctx.params[1].type == 'str' and ctx.params[2].type == 'object'
+
+CFFI_TYPES = {
+    'int': clibffi.ffi_type_sint64,
+    'long': clibffi.ffi_type_sint64,
+}
+
+def _cast_aotype_to_ffitype(rtype):
+    if rtype.endswith('*'):
+        return clibffi.ffi_type_pointer
+    return CFFI_TYPES[rtype]
+
+def _cast_aovalue_to_ffivalue(space, value, type, ptr):
+    if value.type == 'str' and type == 'char *':
+        pnt = rffi.cast(rffi.CCHARPP, ptr)
+        pnt[0] = rffi.str2charp(value.strvalue)
+    elif value.type == 'int' and type == 'int':
+        pnt = rffi.cast(rffi.INTP, ptr)
+        pnt[0] = rffi.cast(rffi.INT, value.intvalue)
+    elif value.type == 'float' and type == 'float':
+        pnt = rffi.cast(rffi.FLOATP, ptr)
+        pnt[0] = rffi.cast(rffi.FLOAT, value.floatvalue)
+    else:
+        raise ValueError('not implemented.')
+
+def _cast_ffivalue_to_aovalue(space, ptr, type):
+    if type == 'int':
+        ptn = rffi.cast(rffi.INTP, ptr)
+        return space.newrawint(rffi.cast(rffi.LONG, ptn[0]))
+    else:
+        raise ValueError('not implemented.')
+
+def _align(n): return (n + 7) & ~7
+
+@as_f('__ffi_function__')
+def builtin_ffi_function(ctx):
+    assert len(ctx.params) == 4 and \
+            ctx.params[0].type == 'str' and \
+            ctx.params[1].type == 'str' \
+            and ctx.params[2].type == 'str' \
+            and ctx.params[3].type == 'array'
+    for e in ctx.params[3].arrayvalue:
+        assert e.type == 'str'
     libname = ctx.params[0].strvalue
     funcname = ctx.params[1].strvalue
+    rtype = ctx.params[2].strvalue
+    atypes = [e.strvalue for e in ctx.params[3].arrayvalue]
 
-
-@as_f('system')
-def builtin_system(ctx):
-    assert len(ctx.params) == 1 and ctx.params[0].type == 'str'
-    struct_name = ctx.params[0].strvalue
-    lib = ctx.machine.dylibs['libc.dylib']
-    #lib = rdynload.dlopen(rffi.str2charp('libc.dylib'))
-    func_ptr = rdynload.dlsym(lib, rffi.str2charp('system'))
-    cif = lltype.malloc(jit_libffi.CIF_DESCRIPTION, 1, flavor='raw')
+    argc = len(atypes)
+    cif = lltype.malloc(jit_libffi.CIF_DESCRIPTION, argc, flavor='raw')
     cif.abi = clibffi.FFI_DEFAULT_ABI
-    cif.nargs = 1
-    cif.rtype = clibffi.ffi_type_sint32
-    cif.atypes = lltype.malloc(clibffi.FFI_TYPE_PP.TO, 1, flavor='raw')
-    cif.atypes[0] = clibffi.ffi_type_pointer
-    cif.exchange_size = jit_libffi.SIZE_OF_FFI_ARG + jit_libffi.SIZE_OF_FFI_ARG
-    cif.exchange_result = jit_libffi.SIZE_OF_FFI_ARG
-    cif.exchange_args[0] = jit_libffi.SIZE_OF_FFI_ARG
-    jit_libffi.jit_ffi_prep_cif(cif)
+    cif.nargs = argc
+    cif.rtype = _cast_aotype_to_ffitype(rtype)
+    cif.atypes = lltype.malloc(clibffi.FFI_TYPE_PP.TO, argc, flavor='raw')
+
+    # create room for an array of nargs pointers
+    exchange_offset = rffi.sizeof(rffi.VOIDP) * argc
+    exchange_offset = _align(exchange_offset)
+    cif.exchange_result = exchange_offset
+
+    # create room for return value, roundup to sizeof(ffi-arg)
+    exchange_offset += max(rffi.getintfield(cif.rtype, 'c_size'), jit_libffi.SIZE_OF_FFI_ARG)
+
+    # set size for each arg
+    for i in range(argc):
+        atype = _cast_aotype_to_ffitype(atypes[i])
+        cif.atypes[i] = atype
+        exchange_offset = _align(exchange_offset)
+        cif.exchange_args[i] = exchange_offset
+        exchange_offset += rffi.getintfield(atype, 'c_size')
+
+    cif.exchange_size = exchange_offset
+    code = jit_libffi.jit_ffi_prep_cif(cif)
+    if code != clibffi.FFI_OK:
+        ctx.machine.error = ctx.machine.space.newstr('failed to build function %s for lib %s.' % (funcname, libname))
+    ctx.machine.space.ffi_functions[(libname, funcname)] = ctx.machine.space.newforeignfunction(
+            libname, funcname, rtype, atypes, cif)
+    ctx.tos.push(ctx.machine.space.null)
+
+
+@as_f('__ffi_struct__')
+def builtin_ffi_struct(ctx):
+    pass
+
+@as_f('__ffi_union__')
+def builtin_ffi_struct(ctx):
+    pass
+
+@as_f('__ffi_enum__')
+def builtin_ffi_enum(ctx):
+    pass
+
+@as_f('__ffi_typedef__')
+def builtin_ffi_typedef(ctx):
+    pass
+
+@as_f('__ffi_call__')
+def builtin_ffi_call(ctx):
+    assert len(ctx.params) == 3 and \
+            ctx.params[0].type == 'str' and \
+            ctx.params[1].type == 'str' and \
+            ctx.params[2].type == 'array'
+
+    libname = ctx.params[0].strvalue
+    symname = ctx.params[1].strvalue
+    args = ctx.params[2].arrayvalue
+    lib = ctx.machine.space.ffi_libs[libname].lib
+    ff = ctx.machine.space.ffi_functions[(libname, symname)]
+    cif = ff.cif
+    func = rdynload.dlsym(lib, rffi.str2charp(symname))
     exc = lltype.malloc(rffi.VOIDP.TO, cif.exchange_size, flavor='raw')
-    argv0 = ctx.params[0].strvalue
-    argv0_ptr = rffi.str2charp(argv0)
-    argv0_ptr = rffi.cast(rffi.VOIDP, argv0_ptr)
-    offset_0 = rffi.ptradd(exc, cif.exchange_args[0])
-    exc_exchange_args0 = rffi.cast(rffi.VOIDPP, offset_0)
-    exc_exchange_args0[0] = argv0_ptr
-    jit_libffi.jit_ffi_call(cif, func_ptr, exc)
-    result_ptr = rffi.ptradd(exc, cif.exchange_result)
-    result_ptr = rffi.cast(rffi.SIGNEDP, result_ptr)
-    result = result_ptr[0]
+    ptr = exc
+    for i in range(cif.nargs):
+        ptr = rffi.ptradd(exc, cif.exchange_args[i])
+        _cast_aovalue_to_ffivalue(ctx.machine.space, args[i], ff.atypes[i], ptr)
+
+    jit_libffi.jit_ffi_call(cif, func, exc)
+
+    ptr = rffi.ptradd(exc, cif.exchange_result)
+    val = _cast_ffivalue_to_aovalue(ctx.machine.space, ptr, ff.rtype)
     lltype.free(exc, flavor='raw')
-    # TODO: please provide a `newrawint` function (int)->Int.
-    ctx.tos.push(ctx.machine.space.newint(str(result)))
+    ctx.tos.push(val)

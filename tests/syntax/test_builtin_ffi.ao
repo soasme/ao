@@ -1,0 +1,7 @@
+__ffi_dynload__("c", "libc.dylib")
+__ffi_function__("c", "system", "int", ["char *"])
+code = __ffi_call__("c", "system", ["ls ."])
+print code
+
+code = __ffi_call__("c", "system", ["ls ./non-exists"])
+print code

@@ -439,12 +439,21 @@ class ForeignFunction(Value):
 
     type = 'foreignfunction'
 
-    def __init__(self, space, libname, symname, atypes, rtype):
+    def __init__(self, space, libname, symname, rtype, atypes, cif):
         self.space = space
         self.libname = libname
         self.symname = symname
         self.atypes = atypes
         self.rtype = rtype
+        self.cif = cif
+
+class ForeignLibrary(Value):
+
+    type = 'foreignlibrary'
+    def __init__(self, space, libname, lib):
+        self.libname = libname
+        self.space = space
+        self.lib = lib
 
 class BuiltinFunction(Function):
 
@@ -460,6 +469,12 @@ class Space(object):
         self.true = Bool(self, True)
         self.false = Bool(self, False)
         self.null = Null(self)
+
+        self.ffi_libs = {}
+        self.ffi_structs = {}
+        self.ffi_unions = {}
+        self.ffi_functions = {}
+        self.ffi_enums = {}
 
     def newliteral(self, s):
         if s == 'null':
@@ -541,8 +556,14 @@ class Space(object):
     def newint(self, i):
         return Int(self, int(i))
 
+    def newrawint(self, i):
+        return Int(self, i)
+
     def newfloat(self, f):
         return Float(self, float(f))
+
+    def newrawfloat(self, f):
+        return Float(self, f)
 
     def newbigint(self, b):
         return BigInt(self, rbigint.fromstr(b))
@@ -559,11 +580,14 @@ class Space(object):
     def newfunction(self, id, frame):
         return Function(self, id, frame)
 
-    def newforeignfunction(self, libname, symname, atypes, rtype):
-        return ForeignFunction(self, libname, symname, atypes, rtype)
+    def newforeignfunction(self, libname, symname, rtype, atypes, cif):
+        return ForeignFunction(self, libname, symname, rtype, atypes, cif)
 
     def newbuiltinfunction(self, id):
         return BuiltinFunction(self, id)
+
+    def newforeignlibrary(self, libname, lib):
+        return ForeignLibrary(self, libname, lib)
 
 
 def run_bin(left, op, right):
@@ -769,8 +793,6 @@ class Interpreter(BaseInterpreter):
         self.program = program
         self.error = None
         self.space = Space()
-        self.dylibs = {} # str: rdynload.dlopen
-        self.cdefs = {} # (str lib, str fname): exc
         self.stack = [Frame(entry, space=self.space, bytecode=program.programs[entry])]
 
     def tos(self):
@@ -830,8 +852,8 @@ class Interpreter(BaseInterpreter):
         if isinstance(func_val, BuiltinFunction):
             params = []
             for i in range(ctx.opval):
-                params.append(self.tos().pop())
-            builtin = MODULE[func_val.id[2:]]
+                params.insert(0, self.tos().pop())
+            builtin = MODULE[func_val.id]
             builtin(BuiltinContext(self, self.tos(), self.get_bytecode(ctx.name), params))
             ctx.pc += 1
         else:
