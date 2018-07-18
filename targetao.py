@@ -435,6 +435,17 @@ class Function(Value):
         self.space = space
         self.frame = frame
 
+class ForeignFunction(Value):
+
+    type = 'foreignfunction'
+
+    def __init__(self, space, libname, symname, atypes, rtype):
+        self.space = space
+        self.libname = libname
+        self.symname = symname
+        self.atypes = atypes
+        self.rtype = rtype
+
 class BuiltinFunction(Function):
 
     type = 'builtinfunction'
@@ -547,6 +558,12 @@ class Space(object):
 
     def newfunction(self, id, frame):
         return Function(self, id, frame)
+
+    def newforeignfunction(self, libname, symname, atypes, rtype):
+        return ForeignFunction(self, libname, symname, atypes, rtype)
+
+    def newbuiltinfunction(self, id):
+        return BuiltinFunction(self, id)
 
 
 def run_bin(left, op, right):
@@ -752,6 +769,8 @@ class Interpreter(BaseInterpreter):
         self.program = program
         self.error = None
         self.space = Space()
+        self.dylibs = {} # str: rdynload.dlopen
+        self.cdefs = {} # (str lib, str fname): exc
         self.stack = [Frame(entry, space=self.space, bytecode=program.programs[entry])]
 
     def tos(self):
@@ -808,7 +827,7 @@ class Interpreter(BaseInterpreter):
 
     def run_CALL_FUNCTION(self, ctx):
         func_val = self.tos().pop()
-        if func_val.id.startswith('@@'):
+        if isinstance(func_val, BuiltinFunction):
             params = []
             for i in range(ctx.opval):
                 params.append(self.tos().pop())
@@ -984,7 +1003,7 @@ class Frame(object):
         elif self.parent is not None:
             return self.parent.load(key)
         elif key in MODULE:
-            return Function(self.space, '@@' + key, None)
+            return BuiltinFunction(self.space, key)
         else:
             raise Exception('unknown variable: %s' % key)
 

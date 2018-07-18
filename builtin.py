@@ -39,11 +39,43 @@ def builtin_raise(ctx):
     ctx.machine.error = ctx.params[0]
 
 
+@as_f('__ffi_dynload__')
+def builtin_dynload(ctx):
+    assert len(ctx.params) == 1 and ctx.params[0].type == 'str'
+    libname = ctx.params[0].strvalue
+
+    # load dylib if haven't
+    if libname in ctx.machine.dylibs:
+        ctx.tos.push(ctx.machine.space.null)
+        return
+
+    # try to load dylib
+    path = rffi.str2charp(libname)
+    try:
+        lib = rdynload.dlopen(path)
+    except rdynload.DLOpenError as e:
+        ctx.machine.error = ctx.machine.space.newstr('unable to load library: %s' % libname)
+        return
+    finally:
+        lltype.free(path, flavor='raw')
+
+    # cache dylib
+    ctx.machine.dylibs[libname] = lib
+    ctx.tos.push(ctx.machine.space.null)
+
+@as_f('dyncdef')
+def builtin_dyncdef(ctx):
+    assert len(ctx.params) == 1 and ctx.params[0].type == 'str' and ctx.params[1].type == 'str' and ctx.params[2].type == 'object'
+    libname = ctx.params[0].strvalue
+    funcname = ctx.params[1].strvalue
+
+
 @as_f('system')
 def builtin_system(ctx):
     assert len(ctx.params) == 1 and ctx.params[0].type == 'str'
     struct_name = ctx.params[0].strvalue
-    lib = rdynload.dlopen(rffi.str2charp('libc.dylib'))
+    lib = ctx.machine.dylibs['libc.dylib']
+    #lib = rdynload.dlopen(rffi.str2charp('libc.dylib'))
     func_ptr = rdynload.dlsym(lib, rffi.str2charp('system'))
     cif = lltype.malloc(jit_libffi.CIF_DESCRIPTION, 1, flavor='raw')
     cif.abi = clibffi.FFI_DEFAULT_ABI
