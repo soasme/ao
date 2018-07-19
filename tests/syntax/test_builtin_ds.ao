@@ -1,0 +1,11 @@
+value or error = __ds_get__("key")
+print error
+
+value = __ds_set__("key", "value", {})
+print value
+
+__ds_get__("key")
+
+__ds_set__("key", 1, {})
+
+print __ds_get__("key")

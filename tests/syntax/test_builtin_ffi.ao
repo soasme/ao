@@ -9,7 +9,14 @@ print code
 __ffi_function__("c", "abs", "int", ["int"])
 print __ffi_call__("c", "abs", [-42])
 
+__ffi_function__("c", "srand", "void", ["int"])
 __ffi_function__("c", "rand", "int", [])
+print __ffi_call__("c", "rand", [])
+__ffi_call__("c", "srand", [123])
+print __ffi_call__("c", "rand", [])
+__ffi_call__("c", "srand", [124])
+print __ffi_call__("c", "rand", [])
+__ffi_call__("c", "srand", [123])
 print __ffi_call__("c", "rand", [])
 
 __ffi_function__("c", "sqrt", "double", ["double"])

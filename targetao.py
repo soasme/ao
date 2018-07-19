@@ -476,6 +476,8 @@ class Space(object):
         self.ffi_functions = {}
         self.ffi_enums = {}
 
+        self.ds_store = {}
+
     def newliteral(self, s):
         if s == 'null':
             return self.null
