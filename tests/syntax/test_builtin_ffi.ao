@@ -5,3 +5,13 @@ print code
 
 code = __ffi_call__("c", "system", ["ls ./non-exists"])
 print code
+
+__ffi_function__("c", "abs", "int", ["int"])
+print __ffi_call__("c", "abs", [-42])
+
+__ffi_function__("c", "rand", "int", [])
+print __ffi_call__("c", "rand", [])
+
+__ffi_function__("c", "sqrt", "double", ["double"])
+print __ffi_call__("c", "sqrt", [2.0])
+print __ffi_call__("c", "sqrt", [4.0])

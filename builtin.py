@@ -68,6 +68,7 @@ def builtin_ffi_dynload(ctx):
 CFFI_TYPES = {
     'int': clibffi.ffi_type_sint64,
     'long': clibffi.ffi_type_sint64,
+    'double': clibffi.ffi_type_double,
 }
 
 def _cast_aotype_to_ffitype(rtype):
@@ -85,13 +86,19 @@ def _cast_aovalue_to_ffivalue(space, value, type, ptr):
     elif value.type == 'float' and type == 'float':
         pnt = rffi.cast(rffi.FLOATP, ptr)
         pnt[0] = rffi.cast(rffi.FLOAT, value.floatvalue)
+    elif value.type == 'float' and type == 'double':
+        pnt = rffi.cast(rffi.DOUBLEP, ptr)
+        pnt[0] = rffi.cast(rffi.DOUBLE, value.floatvalue)
     else:
-        raise ValueError('not implemented.')
+        raise ValueError('not implemented aovalue->ffivalue.')
 
 def _cast_ffivalue_to_aovalue(space, ptr, type):
     if type == 'int':
         ptn = rffi.cast(rffi.INTP, ptr)
         return space.newrawint(rffi.cast(rffi.LONG, ptn[0]))
+    elif type == 'double':
+        ptn = rffi.cast(rffi.DOUBLEP, ptr)
+        return space.newrawfloat(rffi.cast(rffi.DOUBLE, ptn[0]))
     else:
         raise ValueError('not implemented.')
 
