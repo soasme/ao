@@ -1,0 +1,8 @@
+load = f(lib) {
+}
+
+cdef = f(lib, def) {
+}
+
+call = f(lib, func, args) {
+}

@@ -1,0 +1,15 @@
+get = f (o, key) {
+    return 1
+}
+
+resolve = f(o, path) {
+    return 1
+}
+
+get_default = f(o, key, default) {
+    return 1
+}
+
+set_default = f(o, key, default) {
+    return 1
+}

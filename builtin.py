@@ -11,6 +11,42 @@ def as_f(name):
         return f
     return deco
 
+# @as_f('exec')
+# def builtin_exec(ctx):
+    # assert len(ctx.params) == 1 and ctx.params[0].type == 'str'
+    # f_target = '@%d' % ctx.machine.program.f_counter
+    # ctx.machine.program.compile(f_target, source)
+    # bytecode = self.program.programs[f_target]
+    # frame = ctx.tos
+
+# @as_f('resolvef')
+# def builtin_resolvef(ctx):
+    # assert len(ctx.params) == 1 and ctx.params[0].type == 'str'
+    # mod = ctx.params[0].strvalue
+    # partials = mod.split(':')
+    # assrt len(partials) == 2
+    # modname, fname = partials[0], partials[0]
+    # relative_path = modname.replace('.', '/') + '.ao'
+    # lib_path = '/Users/ju.lin/playground/ao/libs'
+    # mod_path = lib_path + '/' + relative_path
+    # if mod_path not in ctx.machine.program.programs:
+        # fp = os.open(mod_path, os.O_RDONLY, 0777)
+        # source = ''
+        # while True:
+            # read = os.read(fp, 4096)
+            # if len(read) == 0: break
+            # source += read
+        # os.close(fp)
+        # ctx.machine.program.compile(mod_path, source)
+        # if mod_path not in ctx.machine.program.programs:
+            # ctx.machine.error = ctx.machine.space.newstr('load %s failed' % mod)
+            # return
+        # frame = Frame(name=mod_path, pc=0, space=ctx.machine.space, parent=None,
+                # bytecode=ctx.machine.program.programs[mod_path])
+    # # todo: load cached frame from interpreter for this module and get f
+
+
+
 @as_f('bool')
 def builtin_bool(ctx):
     assert len(ctx.params) == 1

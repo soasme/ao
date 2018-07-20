@@ -118,7 +118,10 @@ array: "[" (expr [","])* expr* ["]"];
 entry: STRING [":"] expr;
 let: IDENTIFIER ["="] expr;
 catch: IDENTIFIER ["or"] IDENTIFIER ["="] expr;
-apply: IDENTIFIER ["("] (expr [","])* expr* [")"];
+apply: callable ["("] (expr [","])* expr* [")"];
+callable: <module_callable> | <local_callable>;
+module_callable: (IDENTIFIER ["."])* IDENTIFIER [":"] IDENTIFIER;
+local_callable: IDENTIFIER;
 f: ["f"] ["("] (IDENTIFIER [","])* IDENTIFIER* [")"] block;
 if: ["if"] expr block elif* else?;
 elif: ["elif"] expr block;
@@ -227,6 +230,24 @@ class Compiler(RPythonVisitor):
             self.dispatch(param)
         self.dispatch(ast.children[0])
         self.emit([CALL_FUNCTION, len(ast.children[1:])], ast)
+
+    def visit_local_callable(self, ast):
+        self.dispatch(ast.children[0])
+
+    def visit_module_callable(self, ast):
+        symbols = [a.additional_info for a in ast.children]
+        fsym = symbols[-1]
+        modsym = '.'.join(symbols[:-1])
+        sym = '"%s:%s"' % (modsym, fsym)
+        if sym not in self.programs[self.target].literals:
+            self.programs[self.target].literals.append(sym)
+        index = self.programs[self.target].literals.index(sym)
+        self.emit([LOAD_LITERAL, index], ast)
+
+        if 'resolvef' not in self.programs[self.target].symbols:
+            self.programs[self.target].symbols.append('resolvef')
+        index = self.programs[self.target].symbols.index('resolvef')
+        self.emit([LOAD_FUNCTION, index], ast)
 
     def visit_expr(self, ast): self.dispatch(ast.children[0])
 
@@ -796,6 +817,7 @@ class Interpreter(BaseInterpreter):
         self.error = None
         self.space = Space()
         self.stack = [Frame(entry, space=self.space, bytecode=program.programs[entry])]
+        self.cached_frames = {}
 
     def tos(self):
         return self.stack[-1]
